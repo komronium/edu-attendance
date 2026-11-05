@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>attendance</title>
+<script src="/theme.js"></script>
+<link rel="preload" href="/fonts/public-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<a class="skip" href="#view">Asosiy qismga o'tish</a>
+<div class="shell">
+  <aside class="sidebar">
+    <a class="brand" href="#/" aria-label="attendance, bosh sahifa">
+      <span class="logo" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+      <span>attendance</span>
+    </a>
+    <button type="button" id="open-palette" class="side-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 3a8 8 0 1 0 0 16 8 8 0 0 0 0-16z"/><path d="m21 21-4.300-4.300"/></svg><span>Qidirish</span><kbd>Ctrl K</kbd></button>
+    <nav class="tabs" aria-label="Bo'limlar">
+      <a href="#/" data-nav="home">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.500 12 3l9 7.500V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>
+        <span>Bosh sahifa</span>
+      </a>
+      <a href="#/jadval" data-nav="schedule">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M3 10h18M9 4v17M15 4v17"/></svg>
+        <span>Dars jadvali</span>
+      </a>
+      <a href="#/yuklama" data-nav="load">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M21 20H3"/></svg>
+        <span>Yuklama</span>
+      </a>
+      <a href="#/ilmiy-kpi" data-nav="kpi">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+        <span>Ilmiy KPI</span>
+      </a>
+      <a href="#/ustama" data-nav="months">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>
+        <span>Ustama</span>
+      </a>
+      <div class="nav-group" id="course-group">
+        <div class="nav-head">
+          <a href="#/darslar" id="course-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8l10-5 10 5-10 5-10-5z"/><path d="M6 10.500V16c0 1.500 2.700 3 6 3s6-1.500 6-3v-5.500"/></svg>
+            <span>Kurs</span>
+            <b id="owed-badge-group" class="count" hidden></b>
+          </a>
+          <button type="button" id="course-toggle" class="nav-toggle" aria-expanded="false" aria-controls="course-items" aria-label="Kurs bo'limlarini ochish">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+        </div>
+        <div class="nav-items" id="course-items" hidden>
+        <a href="#/darslar" data-nav="lessons">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M8 2v4M16 2v4M3 10h18M9 16l2 2 4-4"/></svg>
+          <span>Darslar</span>
+        </a>
+        <a href="#/talabalar" data-nav="students">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M21 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span>Talabalar</span>
+        </a>
+        <a href="#/qarzlar" data-nav="retakes">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>
+          <span>Qarzlar</span>
+          <b id="owed-badge" class="count" hidden></b>
+        </a>
+        </div>
+      </div>
+      <a href="#/bildirishnomalar" data-nav="notes">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.300 21a1.940 1.940 0 0 0 3.400 0"/></svg>
+        <span>Bildirishnomalar</span>
+        <b id="note-badge" class="count" hidden></b>
+      </a>
+      <a href="#/kabinet" data-nav="cabinet">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="18" height="14" rx="3"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 13h18"/></svg>
+        <span>Kabinet</span>
+      </a>
+    </nav>
+    <div class="side-foot">
+    <div class="theme-row" role="group" aria-label="Mavzu">
+      <button type="button" data-theme-set="light" aria-label="Yorug'" title="Yorug'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.900 4.900l1.400 1.400M17.700 17.700l1.400 1.400M2 12h2M20 12h2M4.900 19.100l1.400-1.400M17.700 6.300l1.400-1.400"/></svg></button>
+      <button type="button" data-theme-set="dark" aria-label="Qorong'i" title="Qorong'i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.800A9 9 0 1 1 11.200 3a7 7 0 0 0 9.800 9.800z"/></svg></button>
+      <button type="button" data-theme-set="auto" aria-label="Tizimga qarab" title="Tizimga qarab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg></button>
+    </div>
+    <a id="sync-alert" class="sync-alert" href="#/kabinet" hidden></a>
+    <p id="sync-time" class="sync-time" hidden></p>
+    <a class="logout" href="/logout">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+      <span>Chiqish</span>
+    </a>
+    </div>
+  </aside>
+  <main id="view" tabindex="-1"></main>
+</div>
+<p id="msg" class="toast" role="alert" hidden></p>
+<dialog id="confirm" aria-labelledby="confirm-text">
+  <form method="dialog">
+    <p id="confirm-text"></p>
+    <div class="dialog-actions">
+      <button value="cancel" autofocus>Bekor qilish</button>
+      <button value="ok" class="primary">Ha</button>
+    </div>
+  </form>
+</dialog>
+<dialog id="palette" aria-label="Qidirish">
+  <input id="palette-input" type="search" placeholder="Sahifa yoki talaba" autocomplete="off" aria-label="Sahifa yoki talaba qidirish">
+  <ul id="palette-list" class="plain"></ul>
+  <p class="palette-hint">↑ ↓ tanlash · Enter ochish · Esc yopish</p>
+</dialog>
+<dialog id="sheet" aria-labelledby="sheet-title">
+  <h2 id="sheet-title"></h2>
+  <div id="sheet-body"></div>
+</dialog>
+<script src="/app.js"></script>
+</body>
+</html>
