@@ -137,7 +137,7 @@ async function refreshBadge() {
   try {
     const { state, last_sync: last } = await api("GET", "/api/oxu/status");
     const alertBox = document.getElementById("sync-alert"), time = document.getElementById("sync-time");
-    const text = { expired: "Sinxronlash to'xtadi. Yangi cookie kiriting.", wrong_account: "Saytda boshqa hisob ochiq. Sinxronlash to'xtatildi.", none: "Avtomatik sinxronlash o'chiq." }[state];
+    const text = { expired: "Sinxronlash to'xtadi. Yangi cookie kiriting.", wrong_account: "Saytda boshqa hisob ochiq. Sinxronlash to'xtatildi.", none: "Avtomatik sinxronlash o'chiq.", error: "Sinxronlash xato berdi. Kabinetni tekshiring." }[state];
     alertBox.textContent = text || ""; alertBox.hidden = !text; alertBox.classList.toggle("calm", state === "none");
     time.textContent = last ? "Sinxronlangan: " + stamp(last) : ""; time.hidden = !last;
   } catch (err) { /* keep the last state */ }
@@ -203,7 +203,7 @@ async function lessonsView() {
   const t = today();
   const [{ sessions }, { para: freePara }, debts] = await Promise.all([api("GET", "/api/sessions"), api("GET", "/api/free-para?date=" + t), api("GET", "/api/retakes")]);
   const start = async (date, para) => {
-    const res = await act(() => api("POST", "/api/sessions", { date, para }));
+    const res = await act(() => api("POST", "/api/sessions", { date, para, room: COURSE.room }));
     if (res) location.hash = "#/dars/" + res.id;
   };
   const finished = sessions.filter((s) => s.finished_at);
@@ -295,6 +295,7 @@ async function lessonView(id) {
     });
     const toggle = async () => {
       const next = !st.present;
+      if (next && st.retake_at && !(await ask(st.name + " qarzni topshirgan. «Keldi» qilinsa, topshirish yozuvi o'chadi.", "Keldi qilish", true))) return;
       st.present = next ? 1 : 0; if (next) st.retake_at = null; paint(); updateCount();
       const ok = await act(() => api("PUT", "/api/sessions/" + id + "/students/" + st.id, { present: next }));
       if (!ok) { st.present = next ? 0 : 1; paint(); updateCount(); } else refreshBadge();
@@ -327,6 +328,8 @@ async function lessonView(id) {
     } });
   topic.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); finishBtn.click(); } });
   const allPresent = async () => {
+    const absent = s.students.filter((st) => !st.present), passed = absent.filter((st) => st.retake_at).length;
+    if (absent.length && !(await ask(absent.length + " ta talaba «kelmadi» turibdi" + (passed ? ", " + passed + " tasining topshirish yozuvi bor" : "") + ". Hammasi «keldi» qilinsa, bu belgilar o'chadi.", "Hammasi keldi", true))) return;
     if (!(await act(() => api("POST", "/api/sessions/" + id + "/all-present")))) return;
     s.students.forEach((st) => { st.present = 1; st.retake_at = null; });
     paints.forEach((p) => p()); updateCount(); refreshBadge();
@@ -498,7 +501,7 @@ async function retakesView() {
     h("option", { value: "", text: "Hamma sanalar" }), days.map((d) => h("option", { value: d, selected: d === rf.day, text: dayText(d) + " " + weekday(d).slice(0, 3) })));
 
   const rows = items.map((x) => h("tr", { class: x.active ? null : "off" },
-    h("td", {}, h("a", { class: "strong", href: "#/talaba/" + x.student_id, text: x.name })),
+    h("td", {}, h("a", { class: "strong person", href: "#/talaba/" + x.student_id, text: x.name })),
     h("td", { class: "nowrap" }, h("a", { href: "#/dars/" + x.session_id, text: dayText(x.date) }), h("span", { class: "muted", text: "  " + paraText(x.para) })),
     h("td", { class: "clip muted", text: x.topic || "–" }),
     x.retake_at
@@ -548,18 +551,21 @@ function withCancel(card, e) {
   } }, icon("x")));
 }
 
+async function startCourse(e) {
+  const t = today(), label = shortDate(e.date) + ", " + e.para + "-para";
+  if (e.date !== t && !(await ask(label + " uchun davomat boshlansinmi? Hamma «keldi» bo'lib turadi.", "Boshlash"))) return;
+  const res = await act(() => api("POST", "/api/sessions", { date: e.date, para: e.appPara, room: COURSE.room }));
+  if (res) location.hash = "#/dars/" + res.id;
+}
 function courseCard(e, color) {
-  const t = today(), s = e.session;
+  const t = today(), s = e.session, over = paraOver(e, t, nowTime());
   const lines = cardLines(COURSE.subject, COURSE.type, COURSE.group, COURSE.room);
   if (s) return h("a", { class: "slot " + color + (s.finished_at ? " taken" : ""), href: "#/dars/" + s.id }, lines,
-    s.finished_at ? state("Olingan · " + s.came + "/" + s.total, "check") : state("Olinmoqda", null, "active"));
+    s.finished_at ? state("Olingan · " + s.came + "/" + s.total, "check") : over ? state("Tugatilmagan", null, "warn") : state("Olinmoqda", null, "active"));
   if (e.date > t) return h("div", { class: "slot " + color }, lines, state("Rejada"));
   const label = shortDate(e.date) + ", " + e.para + "-para";
-  return h("button", { type: "button", class: "slot " + color, "aria-label": COURSE.subject + ", " + label + ": davomatni boshlash", onclick: async () => {
-      if (e.date !== t && !(await ask(label + " uchun davomat boshlansinmi? Hamma «keldi» bo'lib turadi.", "Boshlash"))) return;
-      const res = await act(() => api("POST", "/api/sessions", { date: e.date, para: e.appPara, room: COURSE.room }));
-      if (res) location.hash = "#/dars/" + res.id;
-    } }, lines, e.date === t ? state("Davomatni boshlash", null, "active") : state("Olinmagan"));
+  return h("button", { type: "button", class: "slot " + color, "aria-label": COURSE.subject + ", " + label + ": davomatni boshlash", onclick: () => startCourse(e) },
+    lines, over ? state("Olinmagan", null, "warn") : state("Davomatni boshlash", null, "active"));
 }
 // how far through the para the clock is, drawn across today's cell
 function nowLine(p, now) {
@@ -573,7 +579,7 @@ function siteCard(l, unsaved, color) {
   const t = today(), past = l.date < t;
   const taken = unsaved && past && !unsaved.has(l.date + "|" + Number(l.para));
   // without status data a past lesson simply shows no status line
-  const status = l.date > t ? state("Rejada") : taken ? state("Olingan", "check") : unsaved && past ? state("Olinmagan") : null;
+  const status = l.date > t ? state("Rejada") : taken ? state("Olingan", "check") : unsaved && past ? state("Olinmagan", null, "warn") : null;
   const lines = [cardLines(l.subject, fmtType(l.type), l.group, fmtRoom(l.room)), status];
   const cls = "slot " + color + (taken ? " taken" : "");
   return l.url ? h("a", { class: cls, href: SITE + l.url, target: "_blank", rel: "noopener", title: "digital.oxu.uz da ochish" }, lines) : h("div", { class: cls }, lines);
@@ -613,6 +619,30 @@ function entriesFor(dates, ctx) {
   return out;
 }
 
+const paraOver = (e, t, now) => e.date < t || (e.date === t && !!PARA_TIMES[e.para] && PARA_TIMES[e.para][1] <= now);
+// this app is the only record for the group, so every lesson that ended without finished attendance counts
+function courseGaps(ctx, t, now) {
+  if (!ctx.firstDay) return [];
+  const dates = [];
+  for (let d = ctx.firstDay; d <= t; d = shiftDay(d, 1)) dates.push(d);
+  return entriesFor(dates, ctx).filter((e) => e.kind === "course" && paraOver(e, t, now) && !(e.session && e.session.finished_at))
+    .sort((a, b) => b.date.localeCompare(a.date) || b.para - a.para);
+}
+// the lesson happening now, or the next one that has not been taken yet
+function nextEntry(ctx, t, now) {
+  return entriesFor([...Array(14).keys()].map((i) => shiftDay(t, i)), ctx)
+    .filter((e) => (e.date > t || (PARA_TIMES[e.para] && PARA_TIMES[e.para][1] >= now)) && !(e.session && e.session.finished_at))
+    .sort((a, b) => a.date.localeCompare(b.date) || a.para - b.para)[0];
+}
+function nextBand(e, t, now, action) {
+  const times = PARA_TIMES[e.para], isNow = e.date === t && times && times[0] <= now && now <= times[1];
+  return h("section", { class: "card next", "aria-label": "Keyingi dars" },
+    h("span", { class: "label", text: isNow ? "Hozirgi dars" : "Keyingi dars" }),
+    h("b", { text: e.kind === "site" ? e.lesson.subject : COURSE.subject + " · " + COURSE.type + " · " + COURSE.group }),
+    h("span", { class: "muted", text: [capital(relDay(e.date) || longDay(e.date)), e.para + "-para", times ? times.join("–") : "", e.kind === "site" ? fmtRoom(e.lesson.room) : COURSE.room].filter(Boolean).join(" · ") }),
+    action || null);
+}
+
 async function scheduleView() {
   const [{ sessions }, { data, synced_at }, { items: cancelledList }] = await Promise.all([api("GET", "/api/sessions"), api("GET", "/api/oxu"), api("GET", "/api/cancelled")]);
   const cancelled = new Set(cancelledList.map((c) => cancelKey(c.date, c.para, c.subject)));
@@ -632,20 +662,13 @@ async function scheduleView() {
   for (let p = Math.min(...paras); p <= Math.max(...paras); p++) rows.push(p);
 
   const nowPara = (p) => PARA_TIMES[p] && PARA_TIMES[p][0] <= now && now <= PARA_TIMES[p][1];
-  const nextUp = weekEntries([...Array(14).keys()].map((i) => shiftDay(t, i)))
-    .filter((e) => (e.date > t || (PARA_TIMES[e.para] && PARA_TIMES[e.para][1] >= now)) && !(e.session && e.session.finished_at))
-    .sort((a, b) => a.date.localeCompare(b.date) || a.para - b.para)[0];
-  const next = nextUp ? h("section", { class: "card next", "aria-label": "Keyingi dars" },
-    h("span", { class: "label", text: nextUp.date === t && nowPara(nextUp.para) ? "Hozirgi dars" : "Keyingi dars" }),
-    h("b", { text: nextUp.kind === "site" ? nextUp.lesson.subject : COURSE.subject + " · " + COURSE.type + " · " + COURSE.group }),
-    h("span", { class: "muted", text: [capital(relDay(nextUp.date) || longDay(nextUp.date)), nextUp.para + "-para", PARA_TIMES[nextUp.para] ? PARA_TIMES[nextUp.para].join("–") : "", nextUp.kind === "site" ? fmtRoom(nextUp.lesson.room) : COURSE.room].filter(Boolean).join(" · ") })) : null;
+  const nextUp = nextEntry(ctx, t, now);
+  const next = nextUp ? nextBand(nextUp, t, now) : null;
 
   const move = (n) => () => { jw.offset = n === 0 ? 0 : jw.offset + n; scheduleView(); };
   const range = shortDate(monday) + " – " + shortDate(shownDays[shownDays.length - 1]);
   const count = entries.length;
-  // the week with lessons today is built around today; any other week stays an even grid
-  const staged = entries.some((e) => e.date === t);
-  const table = h("div", { class: "card flush" }, h("table", { class: "timetable" + (staged ? " stage" : "") },
+  const table = h("div", { class: "card flush" }, h("table", { class: "timetable" },
     h("caption", { class: "sr-only", text: "Haftalik dars jadvali" }),
     h("thead", {}, h("tr", {}, h("th", { scope: "col", class: "para-col", text: "Para" }),
       shownDays.map((d) => h("th", { scope: "col", class: d === t ? "today" : null }, h("span", { text: capital(weekday(d)) }), h("small", { text: d === t ? "Bugun" : shortDate(d) }))))),
@@ -653,19 +676,12 @@ async function scheduleView() {
       h("th", { scope: "row", class: "para-col" }, h("span", { text: p + "-para" }), PARA_TIMES[p] ? h("small", { text: PARA_TIMES[p].join("–") }) : null),
       shownDays.map((d) => h("td", { class: (d === t ? "today" : "") + (d === t && nowPara(p) ? " now" : "") },
         d === t && nowPara(p) ? nowLine(p, now) : null,
-        entries.filter((e) => e.date === d && e.para === p).map((e) => slotCard(e)))))))));
+        entries.filter((e) => e.date === d && e.para === p).map((e) => e.kind === "site" ? withCancel(siteCard(e.lesson, unsaved, colorOf(e.lesson.subject)), e) : e.session ? courseCard(e, colorOf(COURSE.subject)) : withCancel(courseCard(e, colorOf(COURSE.subject)), e)))))))));
 
-  function slotCard(e) {
-    const site = e.kind === "site", name = site ? e.lesson.subject : COURSE.subject;
-    const card = site ? siteCard(e.lesson, unsaved, colorOf(name)) : courseCard(e, colorOf(name));
-    // compact chips keep their full description on hover
-    if (!card.title) card.title = site ? [name, fmtType(e.lesson.type), e.lesson.group, fmtRoom(e.lesson.room)].filter(Boolean).join(", ") : [name, COURSE.type, COURSE.group, COURSE.room].join(", ");
-    return site || !e.session ? withCancel(card, e) : card;
-  }
   const noSite = !entries.some((e) => e.kind === "site");
   const inWeek = [...new Set(entries.map((e) => e.kind === "site" ? e.lesson.subject : COURSE.subject))];
   const legend = h("div", { class: "legend" }, inWeek.map((n) => h("span", { class: "key " + colorOf(n) }, h("i"), n)),
-    h("span", { class: "muted hint", text: "To'liq rang: davomat olingan. Och rang: olinmagan yoki rejada." }));
+    h("span", { class: "muted hint", text: "To'liq rang: davomat olingan. Och rang: hali olinmagan." }));
   // this semester's gaps are what needs attention; older ones stay available below them
   const start = (data && data.load && data.load.start) || "";
   const live = (unsavedList || []).filter((l) => !cancelled.has(cancelKey(l.date, l.para, l.subject)));
@@ -674,10 +690,15 @@ async function scheduleView() {
     h("td", { class: "nowrap strong", text: dayText(l.date) }), h("td", { class: "nowrap muted", text: l.para + "-para" }), h("td", { class: "clip", text: l.subject }),
     h("td", { class: "nowrap muted", text: l.group }),
     h("td", { class: "right" }, l.url ? h("a", { href: SITE + l.url, target: "_blank", rel: "noopener", text: "Saytda ochish" }) : null));
-  const missing = live.length ? h("details", { class: "card flush missing" + (current.length ? "" : " calm") },
-    h("summary", {}, current.length ? [icon("x"), h("b", { text: current.length + " ta darsda davomat olinmagan" }), older.length ? h("span", { class: "muted", text: "oldingi semestrlarda yana " + older.length + " ta" }) : null]
+  const pending = courseGaps(ctx, t, now), open = current.length + pending.length;
+  const pendingRow = (e) => h("tr", {},
+    h("td", { class: "nowrap strong", text: dayText(e.date) }), h("td", { class: "nowrap muted", text: e.para + "-para" }), h("td", { class: "clip", text: COURSE.subject }),
+    h("td", { class: "nowrap muted", text: COURSE.group }),
+    h("td", { class: "right" }, e.session ? h("a", { href: "#/dars/" + e.session.id, text: "Tugatish" }) : h("button", { type: "button", class: "quiet", text: "Davomatni boshlash", onclick: () => startCourse(e) })));
+  const missing = live.length || pending.length ? h("details", { class: "card flush missing" + (open ? "" : " calm") },
+    h("summary", {}, open ? [icon("x"), h("b", { text: open + " ta darsda davomat olinmagan" }), older.length ? h("span", { class: "muted", text: "oldingi semestrlarda yana " + older.length + " ta" }) : null]
       : [icon("check"), h("b", { text: "Bu semestrda hamma davomat olingan" }), h("span", { class: "muted", text: "oldingi semestrlarda " + older.length + " ta olinmagan" })]),
-    h("table", {}, h("tbody", {}, current.map(missingRow),
+    h("table", {}, h("tbody", {}, pending.map(pendingRow), current.map(missingRow),
       older.length ? h("tr", { class: "group" }, h("th", { colspan: "5", scope: "colgroup", text: "Oldingi semestrlar" })) : null, older.map(missingRow)))) : null;
   const weekCancelled = cancelledList.filter((c) => days.includes(c.date));
   const undo = weekCancelled.length ? h("details", { class: "fold-line undo" }, h("summary", { text: weekCancelled.length + " ta dars bo'lmagan deb belgilangan" }),
@@ -742,7 +763,7 @@ async function loadView() {
   if (!load) return show(pageHead("Yuklama"), h("p", { class: "card empty" }, "Yuklama hali yo'q. ", h("a", { href: "#/kabinet", text: "Kabinetda sinxronlang" })));
 
   const { lines, independent, course, coursePlanHours } = computeLoad(data, sessions, coursePlan, cancelled);
-  const all = total(lines), site = total(lines.filter((l) => !l.course));
+  const site = total(lines.filter((l) => !l.course));
   const colorOf = subjectColors(data);
   const share = (v, plan) => (plan ? Math.min(100, 100 * v / plan) : 0);
 
@@ -781,12 +802,12 @@ async function loadView() {
   const legendKey = (cls, label, v) => h("span", { class: "key" }, h("i", { class: cls }), label, h("b", { text: hrs(v) + " soat" }));
   const hero = h("section", { class: "card hero-load", "aria-label": "Umumiy bajarilishi" },
     h("div", { class: "hero-top" },
-      h("div", {}, h("span", { class: "label", text: "Semestr bajarilishi" }), h("b", { class: "big", text: all.plan ? pct(100 * (all.done + all.noAtt) / all.plan) : "–" })),
+      h("div", {}, h("span", { class: "label", text: "Saytdagi yuklama bajarilishi" }), h("b", { class: "big", text: site.plan ? pct(100 * (site.done + site.noAtt) / site.plan) : "–" })),
       h("div", { class: "parts" },
         h("span", {}, h("small", { text: "Saytdagi yuklama" }), h("b", { text: hrs(site.done + site.noAtt) + " / " + hrs(site.plan) + " soat" })),
         h("span", {}, h("small", { text: COURSE.group + " (taxminiy)" }), h("b", { text: hrs(course.done) + " / ~" + hrs(course.plan) + " soat" })))),
-    stack(all, "tall"),
-    h("div", { class: "legend" }, legendKey("k-done", "O'tilgan", all.done), legendKey("k-soft", "Davomatsiz", all.noAtt), legendKey("k-left", "Qolgan", all.left)));
+    stack(site, "tall"),
+    h("div", { class: "legend" }, legendKey("k-done", "O'tilgan", site.done), legendKey("k-soft", "Davomatsiz", site.noAtt), legendKey("k-left", "Qolgan", site.left)));
 
   const extra = Object.entries(independent);
   show(pageHead("Yuklama", [load.semester, load.position].filter(Boolean).join(" · ")),
@@ -1173,32 +1194,40 @@ async function homeView() {
       h("div", { class: "day-time" }, h("b", { text: e.para + "-para" }), times ? h("small", { text: times.join("–") }) : null, isNow ? chip("Hozir", "live") : null),
       e.kind === "site" ? siteCard(e.lesson, ctx.unsaved, colorOf(e.lesson.subject)) : courseCard(e, colorOf(COURSE.subject)));
   };
-  const upcoming = entriesFor([...Array(14).keys()].map((i) => shiftDay(t, i + 1)), ctx).sort((a, b) => a.date.localeCompare(b.date) || a.para - b.para)[0];
+  const upcoming = nextEntry(ctx, t, now);
   const load = data && data.load ? computeLoad(data, sessions, coursePlan, cancelled) : null;
-  const sum = load ? total(load.lines) : null;
+  const siteSum = load ? total(load.lines.filter((l) => !l.course)) : null, courseSum = load ? total(load.lines.filter((l) => l.course)) : null;
   const score = ((data && data.kpi && data.kpi.bands) || []).reduce((n, b) => n + (Number(b.score) || 0), 0);
   const period = ((data && data.periods) || []).slice(-1)[0];
   const stat = (href, label, value, note) => h("a", { class: "tile link", href }, h("span", { class: "label", text: label }), h("b", { text: String(value) }), note ? h("span", { class: "note", text: note }) : null);
 
   const start = (data && data.load && data.load.start) || "";
   const gaps = (ctx.unsavedList || []).filter((l) => l.date >= start && !cancelled.has(cancelKey(l.date, l.para, l.subject))).length;
-  const todo = entries.filter((e) => e.kind === "course" && !e.session && PARA_TIMES[e.para][1] <= now).length;
+  const todo = courseGaps(ctx, t, now).length;
   const ready = works.filter((w) => { const n = (customSteps[w.band] ?? workSteps(w.band)).length; return n && w.step >= n; }).length;
-  const syncText = { expired: "Sessiya tugadi, yangi cookie kerak", wrong_account: "Saytda boshqa hisob ochiq", none: "Avtomatik sinxronlash o'chiq", error: "Oxirgi sinxronlash o'xshamadi" }[status.state];
+  const syncText = { expired: "Sessiya tugadi, yangi cookie kerak", wrong_account: "Saytda boshqa hisob ochiq", none: "Avtomatik sinxronlash o'chiq", error: "Sinxronlash xato berdi, Kabinetni tekshiring" }[status.state];
   const tasks = [
     syncText ? ["#/kabinet", "alert", syncText] : null,
-    todo ? ["#/jadval", "alert", "Bugun " + todo + " ta darsda davomat olinmagan"] : null,
+    todo ? ["#/jadval", "alert", COURSE.group + ": " + todo + " ta darsda davomat olinmagan"] : null,
     gaps ? ["#/jadval", "alert", "Saytda " + gaps + " ta darsda davomat olinmagan"] : null,
     debts.owed ? ["#/qarzlar", "clock", debts.owed + " ta qarz topshirilmagan"] : null,
     ready ? ["#/ilmiy-kpi", "check", ready + " ta ish saytga yuklashga tayyor"] : null,
     notes.unread ? ["#/bildirishnomalar", "alert", notes.unread + " ta yangi bildirishnoma"] : null,
   ].filter(Boolean);
 
+  const running = upcoming && upcoming.kind === "course" && upcoming.date === t && now >= PARA_TIMES[upcoming.para][0];
+  const nextAction = !running ? null : upcoming.session ? h("button", { type: "button", class: "primary", text: "Davomatni davom ettirish", onclick: () => { location.hash = "#/dars/" + upcoming.session.id; } })
+    : h("button", { type: "button", class: "primary", text: "Davomatni boshlash", onclick: () => startCourse(upcoming) });
+  const periodMonth = period ? period.label.replace(/^\d+[^\p{L}]+/u, "") : "";
+  const periodRow = ((data && data.months) || []).find((m) => m.month.toLowerCase() === periodMonth.toLowerCase());
+  const periodNote = period ? periodMonth + (periodRow && /^taxminiy/i.test(periodRow.status) ? ", taxminiy" : "") : "Sinxronlanmagan";
+
   show(pageHead("Bugun", capital(longDay(t))),
+    upcoming ? nextBand(upcoming, t, now, nextAction) : null,
     h("div", { class: "tiles" },
-      stat("#/jadval", "Bugungi darslar", entries.length, upcoming && !entries.length ? "Keyingisi: " + shortDate(upcoming.date) : null),
-      stat("#/yuklama", "Qolgan yuklama", sum ? hrs(sum.left) + " soat" : "–", sum ? pct(100 * (sum.done + sum.noAtt) / sum.plan) + " bajarildi" : "Sinxronlanmagan"),
-      stat("#/ustama", "Ustama", period ? period.bonus || period.score + "%" : "–", period ? period.label.replace(/^\d+\D+/, "") : "Sinxronlanmagan"),
+      stat("#/jadval", "Bugungi darslar", entries.length),
+      stat("#/yuklama", "Saytdagi qolgan yuklama", siteSum ? hrs(siteSum.left) + " soat" : "–", siteSum ? (courseSum && courseSum.plan ? COURSE.group + ": ~" + hrs(courseSum.left) + " soat, taxminiy" : "") : "Sinxronlanmagan"),
+      stat("#/ustama", "Ustama", period ? period.bonus || period.score + "%" : "–", periodNote),
       stat("#/ilmiy-kpi", "Ilmiy ball", score.toFixed(2), works.length ? works.length + " ta ish kuzatuvda" : null)),
     h("div", { class: "split" },
       h("section", { class: "card", "aria-labelledby": "day-h" }, h("h2", { id: "day-h", text: "Bugungi jadval" }),
