@@ -177,6 +177,9 @@ th { text-align: left; padding: 12px var(--s4) 10px; color: var(--muted); font-s
 td { padding: 10px var(--s4); border-top: 1px solid var(--line); height: 48px; }
 th.num, td.num, th.right, td.right { text-align: right; }
 td.clip { max-width: 0; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+td.topic { width: 100%; overflow-wrap: anywhere; }   /* a lesson's topic is read in full: it wraps, never cut */
+b.came { font-variant-numeric: tabular-nums; }
+b.came.low { color: var(--warn); }
 tr.group th { background: none; padding-top: var(--s4); padding-bottom: 6px; color: var(--text); border-top: 1px solid var(--line); }
 tr.link, tr.tap { cursor: pointer; }
 tr.link:hover td, tr.tap:hover td { background: var(--surface-2); }

@@ -290,10 +290,10 @@ async function lessonsView() {
 
   // a lesson without a topic is a gap in the record: the plan's topic is offered, otherwise it is flagged
   const topicCell = (s) => {
-    if (s.topic) return h("td", { class: "clip", text: s.topic });
+    if (s.topic) return h("td", { class: "topic", text: s.topic });
     const planned = (planOf(sessionEntry(s)) || {}).topic;
-    return planned ? h("td", { class: "clip muted", title: "Rejadagi mavzu, davomatda hali yozilmagan" }, planned, " ", chip("reja"))
-      : h("td", { class: "clip" + (s.finished_at ? " warn-text" : " muted"), text: "Mavzu yozilmagan" });
+    return planned ? h("td", { class: "topic muted", title: "Rejadagi mavzu, davomatda hali yozilmagan" }, planned, " ", chip("reja"))
+      : h("td", { class: "topic" + (s.finished_at ? " warn-text" : " muted"), text: "Mavzu yozilmagan" });
   };
   const groups = [];
   for (const s of sessions) {
@@ -303,14 +303,14 @@ async function lessonsView() {
     g.items.push(s);
   }
   const table = sessions.length ? h("div", { class: "card flush" }, h("table", {},
-    h("thead", {}, h("tr", {}, h("th", { scope: "col", text: "Sana" }), h("th", { scope: "col", text: "Para" }), h("th", { scope: "col", text: "Mavzu" }), h("th", { scope: "col", class: "w-rate", text: "Davomat" }))),
+    h("thead", {}, h("tr", {}, h("th", { scope: "col", text: "Sana" }), h("th", { scope: "col", text: "Para" }), h("th", { scope: "col", text: "Mavzu" }), h("th", { scope: "col", class: "num", text: "Keldi" }))),
     groups.map((g) => h("tbody", {},
       h("tr", { class: "group" }, h("th", { colspan: "4", scope: "colgroup", text: monthTitle(g.key) })),
       g.items.map((s) => linkRow("#/dars/" + s.id, [
         h("td", { class: "nowrap" }, h("a", { class: "strong", href: "#/dars/" + s.id, text: dayText(s.date) }), h("span", { class: "muted", text: "  " + (relDay(s.date) || weekday(s.date).slice(0, 3)) })),
         h("td", { class: "nowrap muted", text: paraText(s.para) }),
         topicCell(s),
-        h("td", { class: "w-rate" }, s.finished_at ? h("span", { class: "rate" }, meter(s.total ? 100 * s.came / s.total : 0), h("b", { text: s.came + "/" + s.total })) : sessionChip(s))]))))))
+        h("td", { class: "num nowrap" }, s.finished_at ? h("b", { class: "came" + (s.total && s.came / s.total < 0.8 ? " low" : ""), title: (s.total - s.came) + " ta talaba kelmadi", text: s.came + "/" + s.total }) : sessionChip(s))]))))))
     : h("p", { class: "card empty", text: "Hali davomat olinmagan. O'ngdagi tugma bilan birinchisini boshlang." });
 
   show(pageHead("Darslar", COURSE.subject + " · " + COURSE.group),
