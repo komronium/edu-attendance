@@ -234,6 +234,7 @@ async function route() {
     if (inCourse) setCourseOpen(true);
     refreshBadge();
     const loading = setTimeout(() => show(skeleton()), 120);
+    if (!subjectStyles.loaded) await loadStyles();
     const res = await act(() => fn(m[1] ? Number(m[1]) : null));
     clearTimeout(loading);
     if (res === null) show(h("div", { class: "card empty" }, h("p", { text: "Ma'lumotni yuklab bo'lmadi." }), h("button", { type: "button", text: "Qayta urinish", onclick: route })));
@@ -630,7 +631,8 @@ function state(text, iconName, cls) { return h("span", { class: "state-line" + (
 // a card has the subject's colour: full when attendance is taken, a lighter shade otherwise
 function cardLines(subject, type, group, room, status) {   // room and status share the last line: a week should fit one screen
   const meta = [type, group].filter(Boolean).join(" · ");
-  return [h("b", { text: subject, title: subject }), h("small", { text: meta, title: meta }),
+  // the timetable shows the short name on one line; the home page has the room for the whole name
+  return [h("b", { title: subject }, h("span", { class: "name-full", text: subject }), h("span", { class: "name-short", text: shortSubject(subject) })), h("small", { text: meta, title: meta }),
     room || status ? h("span", { class: "slot-foot" }, room ? h("small", { text: room, title: room }) : null, status) : null];
 }
 const cancelKey = (date, para, subject) => date + "|" + Number(para) + "|" + canonSubject(subject);
@@ -686,11 +688,67 @@ function siteCard(l, unsaved, color, e) {
 // the load spells some subjects "Name(Other name)" while the schedule uses the name in brackets
 function canonSubject(name) { const m = /\(([^()]+)\)\s*$/.exec(name || ""); return (m ? m[1] : name || "").trim(); }
 
-// one fixed colour per subject, the same on every page: the group's own subject first, the rest in name order
+// One colour per subject, the same on every page and every week. A subject keeps the colour it was
+// first given (saved on the server), so a new subject in the load never reshuffles the others; the
+// owner can change it, and a short name for the timetable, by clicking the subject under the timetable.
+const COLORS = ["c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8"];
+const COLOR_NAMES = { c1: "Ko'k", c2: "To'q sariq", c3: "Yashil", c4: "Binafsha", c5: "Pushti", c6: "Firuza", c7: "Oltin", c8: "Qizil" };
+const FIRST_COLORS = { [COURSE.subject]: "c1", "Tibbiyotda axborot texnologiyalar": "c2" };   // the owner's own picks, used when a subject is first seen
+const subjectStyles = { loaded: false, map: {} };
+async function loadStyles() {
+  try { subjectStyles.map = (await api("GET", "/api/subject-styles")).styles; subjectStyles.loaded = true; } catch (err) { /* colours fall back to name order */ }
+}
 function subjectColors(data) {
   const all = [...((data && data.lessons) || []), ...((data && data.unsaved) || []), ...((data && data.load && data.load.items) || [])];
   const subjects = [COURSE.subject, ...[...new Set(all.map((l) => canonSubject(l.subject)))].sort((a, b) => a.localeCompare(b))];
-  return (name) => "c" + (subjects.indexOf(canonSubject(name)) % 8 + 1);
+  const map = subjectStyles.map, fresh = {};
+  const used = (c) => Object.values(map).filter((x) => x.color === c).length + Object.values(fresh).filter((x) => x.color === c).length;
+  const give = (name, color) => { fresh[name] = { color, short: "" }; };
+  if (!Object.keys(map).length) {
+    // the first time: keep every colour as it was shown until now (name order), and give the owner's
+    // picks by swapping with whichever subject had that colour
+    subjects.forEach((name, i) => give(name, COLORS[i % 8]));
+    for (const [name, color] of Object.entries(FIRST_COLORS)) {
+      if (!fresh[name]) continue;
+      const other = Object.keys(fresh).find((n) => n !== name && fresh[n].color === color);
+      if (other) fresh[other].color = fresh[name].color;
+      fresh[name].color = color;
+    }
+  }
+  for (const name of subjects) if (!map[name] && !fresh[name] && FIRST_COLORS[name] && !used(FIRST_COLORS[name])) give(name, FIRST_COLORS[name]);
+  for (const name of subjects) if (!map[name] && !fresh[name]) give(name, COLORS.reduce((best, c) => (used(c) < used(best) ? c : best), COLORS[0]));   // the least used colour, in palette order
+  if (Object.keys(fresh).length && subjectStyles.loaded) {
+    Object.assign(map, fresh);
+    api("PUT", "/api/subject-styles", { styles: fresh }).catch(() => {});   // fixed from now on
+  }
+  return (name) => (map[canonSubject(name)] || fresh[canonSubject(name)] || { color: "c1" }).color;
+}
+// the timetable's name for a subject: the owner's short name, else whole words up to about 24 letters
+function shortSubject(name) {
+  const style = subjectStyles.map[canonSubject(name)];
+  if (style && style.short) return style.short;
+  const words = canonSubject(name).split(/\s+/), out = [];
+  for (const w of words) { if (out.length && (out.join(" ") + " " + w).length > 24) break; out.push(w); }
+  while (out.length > 1 && /^(va|bilan|uchun|hamda)$/i.test(out[out.length - 1])) out.pop();
+  return out.join(" ") + (out.length < words.length ? "…" : "");
+}
+function editSubject(name, after) {
+  const subj = canonSubject(name), cur = subjectStyles.map[subj] || { color: "c1", short: "" };
+  let color = cur.color;
+  const swatches = h("div", { class: "swatches", role: "radiogroup", "aria-label": "Rang" });
+  const draw = () => swatches.replaceChildren(...COLORS.map((c) => h("button", { type: "button", class: "swatch " + c, role: "radio", "aria-checked": String(c === color), "aria-label": COLOR_NAMES[c], title: COLOR_NAMES[c] + (Object.entries(subjectStyles.map).some(([n, x]) => n !== subj && x.color === c) ? ": boshqa fanda ham bor" : ""), onclick: () => { color = c; draw(); } }, h("i"))));
+  draw();
+  const short = h("input", { name: "short", value: cur.short, maxlength: "40", autocomplete: "off", placeholder: shortSubject(subj) });
+  openSheet(subj, h("form", { class: "stack", onsubmit: async (e) => {
+      e.preventDefault();
+      const style = { color, short: short.value.trim() };
+      if (!(await act(() => api("PUT", "/api/subject-styles", { styles: { [subj]: style } })))) return;
+      subjectStyles.map[subj] = style; sheetBox.close(); say("Saqlandi", true); if (after) after();
+    } },
+    h("div", { class: "field" }, h("span", { text: "Rang" }), swatches),
+    field("Jadvaldagi qisqa nomi", short),
+    h("p", { class: "sub", text: "Bo'sh qolsa, nomning boshi bitta qatorga sig'guncha olinadi. Boshqa sahifalarda to'liq nomi turadi." }),
+    h("div", { class: "dialog-actions" }, h("button", { type: "button", text: "Yopish", onclick: () => sheetBox.close() }), h("button", { type: "submit", class: "primary", text: "Saqlash" }))));
 }
 
 function lessonContext(sessions, data, cancelled) {
@@ -1033,7 +1091,7 @@ async function scheduleView() {
 
   const noSite = !entries.some((e) => e.kind === "site");
   const inWeek = [...new Set(entries.map((e) => e.kind === "site" ? e.lesson.subject : COURSE.subject))].sort((a, b) => colorOf(a).localeCompare(colorOf(b)));   // the same order every week
-  const legend = h("div", { class: "legend" }, inWeek.map((n) => h("span", { class: "key " + colorOf(n) }, h("i"), n)),
+  const legend = h("div", { class: "legend" }, inWeek.map((n) => h("button", { type: "button", class: "key " + colorOf(n), title: "Rang va qisqa nomni o'zgartirish", onclick: () => editSubject(n, scheduleView) }, h("i"), n)),
     h("span", { class: "muted hint", text: "To'liq rang: davomat olingan. Kelgusi darsni bosing: reja va tayyorlik." }));
   // this semester's gaps are what needs attention; older ones stay available below them
   const start = (data && data.load && data.load.start) || "";
@@ -1367,7 +1425,7 @@ async function kpiView() {
     return h("li", { class: "work" },
       h("div", { class: "work-main" }, h("b", { text: w.title }), h("small", { text: w.band }),
         h("div", { class: "steps" }, h("ol", {}, list.map((name, n) => h("li", {},
-          h("button", { type: "button", class: n < now ? "done" : n === now ? "next" : null, disabled: !!paper, "aria-pressed": String(n < now),
+          h("button", { type: "button", class: n < now ? "done" : n === now ? "current" : null, disabled: !!paper, "aria-pressed": String(n < now),
             onclick: () => setStep(w, n + 1 === now ? n : n + 1) }, n < now ? icon("check") : null, name)))),
           paper ? null : h("button", { type: "button", class: "step-edit", text: "tahrirlash", "aria-label": w.title + ": bosqichlarni tahrirlash", onclick: () => editSteps(w) }))),
       h("div", { class: "work-side" }, status,
@@ -1427,11 +1485,13 @@ function defaultSteps(title) {
 // graded by others at the end of the month: nothing the teacher can tick
 const GRADED_BY_OTHERS = /ma.suliyati|moddiy texnik|rektor ustamasi/i;
 // the month's own items that are neither ticked nor graded yet, and the days left to finish them
-function ustamaOpen(data, marks, month) {
+const SKIPPED = -1;   // a progress value: the item cannot be done this month
+function ustamaOpen(data, marks, month, progress) {
   const periods = (data && data.periods) || [];
   const sitePeriod = periods.find((p) => periodKey(p.label) === month), template = sitePeriod || periods[periods.length - 1];
   const ticked = new Set(marks.filter((m) => m.period === month).map((m) => m.item));
-  const open = ((template && template.items) || []).filter((i) => Number(i.max) > 0 && !GRADED_BY_OTHERS.test(i.title) && !ticked.has(i.title) && !(sitePeriod && i.graded > 0));
+  const skipped = new Set((progress || []).filter((p) => p.period === month && p.step === SKIPPED).map((p) => p.item));
+  const open = ((template && template.items) || []).filter((i) => Number(i.max) > 0 && !GRADED_BY_OTHERS.test(i.title) && !ticked.has(i.title) && !skipped.has(i.title) && !(sitePeriod && i.graded > 0));
   const [y, m, d] = today().split("-").map(Number);
   return { count: open.length, points: open.reduce((n, i) => n + Number(i.max), 0), days: new Date(y, m, 0).getDate() - d };
 }
@@ -1460,14 +1520,16 @@ async function monthsView() {
   const pending = waiting.reduce((n, i) => n + Number(i.max), 0);
   const fined = onSite ? penalties.reduce((n, i) => n + (Number(i.value) || 0), 0) : 0;
 
-  const doneCount = mineItems.filter((i) => graded(i) || ticked.has(i.title)).length;
+  const reached = new Map(progress.filter((p) => p.period === month).map((p) => [p.item, p.step]));
+  const skipped = (i) => !graded(i) && reached.get(i.title) === SKIPPED;
+  const doable = mineItems.filter((i) => !skipped(i));
+  const doneCount = doable.filter((i) => graded(i) || ticked.has(i.title)).length;
   const title = (i, cls) => i.criteria.length
     ? h("details", { class: "item" }, h("summary", { class: cls || null, text: i.title }), h("ul", {}, i.criteria.map((c) => h("li", { text: c }))))
     : h("span", { class: cls || null, text: i.title });
 
-  const reached = new Map(progress.filter((p) => p.period === month).map((p) => [p.item, p.step]));
   const stepsOf = (i) => customSteps[i.title] ?? defaultSteps(i.title);
-  const stepNow = (i) => { const n = stepsOf(i).length; return graded(i) ? n : Math.min(n, reached.get(i.title) ?? (ticked.has(i.title) ? n : 0)); };
+  const stepNow = (i) => { const n = stepsOf(i).length; return graded(i) ? n : skipped(i) ? 0 : Math.min(n, reached.get(i.title) ?? (ticked.has(i.title) ? n : 0)); };
   // finishing the last stage is the same as ticking the item, and stepping back from it unticks it
   const saveStep = async (i, step) => {
     const last = stepsOf(i).length;
@@ -1489,32 +1551,66 @@ async function monthsView() {
       h("p", { class: "muted", text: i.title }), field("Har qatorda bitta bosqich, barcha oylar uchun", area),
       h("div", { class: "dialog-actions" }, h("button", { type: "button", text: "Yopish", onclick: () => sheetBox.close() }), h("button", { type: "submit", class: "primary", text: "Saqlash" }))));
   };
+  // the stages as a track: done ones green with a check, the next one ringed, the rest quiet.
+  // Clicking a done stage takes it (and the ones after it) back; any other marks up to it.
   const stepper = (i) => {
     const list = stepsOf(i), now = stepNow(i);
     if (!list.length) return null;
-    return h("div", { class: "steps" }, h("ol", {}, list.map((name, n) => h("li", {},
-      h("button", { type: "button", class: n < now ? "done" : n === now ? "next" : null, disabled: graded(i), "aria-pressed": String(n < now),
-        // clicking the stage you are on steps back one
-        onclick: () => saveStep(i, n + 1 === now ? n : n + 1) }, n < now ? icon("check") : null, name)))));
+    return h("ol", { class: "track" + (skipped(i) ? " off" : ""), "aria-label": "Bosqichlar: " + now + " / " + list.length }, list.map((name, n) => {
+      const state = n < now ? "done" : n === now ? "current" : "todo";
+      return h("li", { class: state },
+        h("button", { type: "button", disabled: graded(i) || skipped(i), "aria-pressed": String(n < now),
+          title: n < now ? "Bekor qilish: «" + name + "» va keyingilari" : "Bajarildi deb belgilash" + (n > now ? " (oldingilari bilan)" : ""),
+          onclick: () => saveStep(i, n < now ? n : n + 1) }, h("span", { class: "dot" }, n < now ? icon("check") : null), h("span", { class: "step-name", text: name })));
+    }));
   };
-  const editLink = (i) => graded(i) ? null : h("button", { type: "button", class: "step-edit", text: stepsOf(i).length ? "bosqichlarni tahrirlash" : "+ bosqichlar", "aria-label": i.title + ": bosqichlarni tahrirlash", onclick: () => editSteps(i) });
-
-  const earnRow = (i) => {
-    const mine = ticked.has(i.title);
+  const skip = async (i, on) => {
+    const ok = await act(async () => {
+      await api("PUT", "/api/kpi-progress", { period: month, item: i.title, step: on ? SKIPPED : 0 });
+      if (on && ticked.has(i.title)) await api("PUT", "/api/kpi-marks", { period: month, item: i.title, done: false });
+      return true;
+    });
+    if (ok) { say(on ? "«Bajarib bo'lmaydi» deb belgilandi" : "Band qaytarildi", true); monthsView(); }
+  };
+  // one name per state, the same as the toast and the home page use
+  const statusOf = (i) => {
     const list = stepsOf(i), now = stepNow(i);
-    let mark = h("span", { class: "tick-done", title: "Tasdiqlandi" }, icon("check"));
-    // the stages are the tick for items that have them: finishing the last one marks it done
-    if (!graded(i) && list.length) mark = h("span", { class: "muted", "aria-label": now + " / " + list.length + " bosqich", text: now + "/" + list.length });
-    else if (!graded(i)) {
-      mark = h("input", { class: "check", type: "checkbox", "aria-label": i.title + ": bajardim", checked: mine });
-      mark.addEventListener("change", async () => {
-        if (await act(() => api("PUT", "/api/kpi-marks", { period: month, item: i.title, done: mark.checked }))) monthsView(); else mark.checked = !mark.checked;
-      });
-    }
-    return h("tr", {}, h("td", { class: "w-check" }, mark), h("td", {}, title(i, "strong"), stepper(i)),
-      h("td", { class: "nowrap status-cell" }, graded(i) ? chip("Tasdiqlandi", "ok") : mine ? chip("Kutilmoqda", "live") : now > 0 ? chip(list[now - 1]) : chip("Bajarilmagan"), editLink(i)),
-      h("td", { class: "num nowrap" }, graded(i) ? [h("b", { text: i.value }), h("span", { class: "muted", text: " / " + i.max })] : h("span", { class: "muted", text: i.max })));
+    if (graded(i)) return chip("Tasdiqlandi", "ok", "check");
+    if (skipped(i)) return chip("Bajarib bo'lmaydi");
+    if (ticked.has(i.title)) return chip("Saytda kutilmoqda", "live", "clock");
+    if (now > 0) return chip("Jarayonda", "warn");
+    return chip(list.length ? "Boshlanmagan" : "Bajarilmagan");
   };
+  const progressCell = (i) => {
+    const list = stepsOf(i), now = stepNow(i);
+    if (graded(i)) return h("span", { class: "tick-done", title: "Tasdiqlandi" }, icon("check"));
+    if (list.length) {
+      return h("div", { class: "prog" + (now === list.length ? " full" : "") + (skipped(i) ? " off" : "") }, h("b", { text: now + "/" + list.length }),
+        h("span", { class: "segs", "aria-hidden": "true" }, list.map((x, n) => h("i", { class: n < now ? "on" : null }))));
+    }
+    const box = h("input", { class: "check", type: "checkbox", "aria-label": i.title + ": bajardim", checked: ticked.has(i.title), disabled: skipped(i) });
+    box.addEventListener("change", async () => {
+      if (await act(() => api("PUT", "/api/kpi-marks", { period: month, item: i.title, done: box.checked }))) monthsView(); else box.checked = !box.checked;
+    });
+    return box;
+  };
+  const actions = (i) => {
+    if (graded(i)) return null;
+    const list = stepsOf(i), now = stepNow(i);
+    const next = !skipped(i) && list.length && now < list.length
+      ? h("button", { type: "button", class: "next-step", "aria-label": i.title + ": «" + list[now] + "» bajarildi", onclick: () => saveStep(i, now + 1) }, icon("check"), list[now]) : null;
+    return h("div", { class: "row-actions" }, next,
+      h("div", { class: "row-more" },
+        skipped(i) ? h("button", { type: "button", class: "step-edit show", text: "Qaytarish", onclick: () => skip(i, false) })
+          : h("button", { type: "button", class: "step-edit", text: "Bajarib bo'lmaydi", title: "Bu oy bajarilmaydi: ochiq bandlar va eslatmalardan chiqadi", onclick: () => skip(i, true) }),
+        skipped(i) ? null : h("button", { type: "button", class: "step-edit", text: list.length ? "Bosqichlar" : "+ Bosqichlar", "aria-label": i.title + ": bosqichlarni tahrirlash", onclick: () => editSteps(i) })));
+  };
+
+  const earnRow = (i) => h("tr", { class: skipped(i) ? "off" : null },
+    h("td", { class: "w-check" }, progressCell(i)),
+    h("td", {}, title(i, "strong"), stepper(i)),
+    h("td", { class: "status-cell" }, statusOf(i), actions(i)),
+    h("td", { class: "num nowrap" }, graded(i) ? [h("b", { text: i.value }), h("span", { class: "muted", text: " / " + i.max })] : h("span", { class: "muted", text: skipped(i) ? "–" : i.max })));
 
   const otherRow = (i) => h("tr", {}, h("td", { class: "w-check" }, graded(i) ? h("span", { class: "tick-done", title: "Tasdiqlandi" }, icon("check")) : h("span", { class: "tick-wait", title: "Oy oxirida" }, icon("clock"))),
     h("td", {}, title(i, "strong")),
@@ -1540,14 +1636,14 @@ async function monthsView() {
   const head = pageHead("Ustama", "Oylik ustama foizi va uning bandlari", sel);
   if (!items.length) return show(head, h("p", { class: "sub" }, "Bandlarni ko'rish uchun ", h("a", { href: "#/kabinet", text: "Kabinetda qayta sinxronlang" }), "."), history);
 
-  const left = month === thisMonth ? ustamaOpen(data, marks, month) : null;
+  const left = month === thisMonth ? ustamaOpen(data, marks, month, progress) : null;
   const part = (cls, label, value) => h("span", {}, h("small", {}, cls ? h("i", { class: cls }) : null, label), h("b", { text: value }));
   show(head,
     h("section", { class: "card hero-load", "aria-label": "Oy natijasi" },
       h("div", { class: "hero-top" },
         h("div", {}, h("span", { class: "label", text: periodTitle(month) + (onSite ? ": tasdiqlangan ustama" : ": kutilayotgan ustama") }), h("b", { class: "big", text: hrs(onSite ? approved : pending) + "%" })),
         h("div", { class: "parts" },
-          part(null, "Mening bandlarim", doneCount + " / " + mineItems.length),
+          part(null, "Mening bandlarim", doneCount + " / " + doable.length + (doable.length < mineItems.length ? " · " + (mineItems.length - doable.length) + " tasi bajarilmaydi" : "")),
           onSite ? part("k-done", "Tasdiqlangan", hrs(approved) + "%") : null,
           part("k-soft", "Kutilmoqda", "+" + hrs(pending) + "%"),
           onSite ? part(null, "Hammasi tasdiqlansa", hrs(approved + pending) + "%") : part(null, "Sayt", "Ochilmagan"))),
@@ -1555,7 +1651,7 @@ async function monthsView() {
       left && left.count ? h("p", { class: "sub", text: left.count + " ta band ochiq, " + hrs(left.points) + " ball. Oy tugashiga " + left.days + " kun qoldi." }) : null),
     h("div", { class: "split" },
       h("div", { class: "card flush" }, h("table", { class: "kpi-items" },
-        h("thead", {}, h("tr", {}, h("th", { scope: "col", class: "w-check", text: "Bajardim" }), h("th", { scope: "col", text: "Ustama bandi" }), h("th", { scope: "col", text: "Holat" }), h("th", { scope: "col", class: "num", text: "Ball" }))),
+        h("thead", {}, h("tr", {}, h("th", { scope: "col", class: "w-check", text: "Bajarildi" }), h("th", { scope: "col", text: "Ustama bandi" }), h("th", { scope: "col", text: "Holat" }), h("th", { scope: "col", class: "num", text: "Ball" }))),
         h("tbody", {}, h("tr", { class: "group" }, h("th", { colspan: "4", scope: "colgroup", text: "Men bajaradigan bandlar" })), mineItems.map(earnRow)),
         others.length ? h("tbody", {}, h("tr", { class: "group" }, h("th", { colspan: "4", scope: "colgroup", text: "Oy oxirida tasdiqlanadi" })), others.map(otherRow)) : null)),
       h("aside", { class: "rail sticky" }, fines, history)));
@@ -1607,7 +1703,7 @@ async function notesView() {
 
 /* ------------------------------------------------------------ home */
 async function homeView() {
-  const [{ data }, { sessions }, { hours: coursePlan }, { items: cancelledList }, status, notes, debts, { works }, { steps: customSteps, marks }] = await Promise.all([
+  const [{ data }, { sessions }, { hours: coursePlan }, { items: cancelledList }, status, notes, debts, { works }, { steps: customSteps, marks, progress }] = await Promise.all([
     api("GET", "/api/oxu"), api("GET", "/api/sessions"), api("GET", "/api/course-plan"), api("GET", "/api/cancelled"), api("GET", "/api/oxu/status"),
     api("GET", "/api/notifications"), api("GET", "/api/retakes"), api("GET", "/api/kpi-works"), api("GET", "/api/kpi-marks"), loadPlans()]);
   const t = today(), now = nowTime();
@@ -1642,7 +1738,7 @@ async function homeView() {
   const paras = (list) => list.map((e) => e.para).join(", ") + "-para";
   const ready = works.filter((w) => { const n = (customSteps[w.band] ?? workSteps(w.band)).length; return n && w.step >= n; }).length;
   const syncText = { expired: "Sessiya tugadi, yangi cookie kerak", wrong_account: "Saytda boshqa hisob ochiq", none: "Avtomatik sinxronlash o'chiq", error: "Sinxronlash xato berdi, Kabinetni tekshiring" }[status.state];
-  const bonus = ustamaOpen(data, marks, t.slice(0, 7));
+  const bonus = ustamaOpen(data, marks, t.slice(0, 7), progress);
   const tasks = [   // [link, icon, text]; the alert ones lead
     syncText ? ["#/kabinet", "alert", syncText] : null,
     todo ? ["#/jadval", "alert", COURSE.group + ": " + todo + " ta darsda davomat olinmagan"] : null,

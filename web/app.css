@@ -241,8 +241,12 @@ a.person { display: inline-block; min-width: 11rem; }
 .timetable .para-col { width: 112px; border-left: 0; }
 .timetable tbody th { padding: var(--s3); background: none; color: var(--text); vertical-align: top; border-top: 1px solid var(--line); }
 .timetable td { padding: var(--s1); height: 94px; vertical-align: top; border-left: 1px solid var(--line); }   /* every row is as tall as one card */
-.timetable .slot { height: 86px; padding-block: 6px; align-content: start; grid-template-rows: auto auto 1fr; }
-.timetable .slot-wrap { height: 86px; }
+.timetable .slot { height: 72px; padding-block: 6px; align-content: start; grid-template-rows: auto auto 1fr; }
+.timetable .slot-wrap { height: 72px; }
+.slot .name-short { display: none; }
+.timetable .slot b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }   /* one line: the short name */
+.timetable .slot .name-full { display: none; }
+.timetable .slot .name-short { display: inline; }
 .timetable td.today { position: relative; }
 .timetable tr.quiet th { color: var(--muted); }
 .timetable tr.quiet th span { font-weight: 500; }
@@ -285,6 +289,12 @@ a.slot.taken:hover { background: color-mix(in srgb, var(--c) 36%, var(--surface)
 .key { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
 .key i { width: 10px; height: 10px; border-radius: 3px; background: var(--c); }
 .legend .hint { margin-left: auto; }
+button.key { min-height: 28px; padding: 2px var(--s2); margin-inline: calc(-1 * var(--s2)); border: 0; border-radius: var(--r-md); background: none; font-size: inherit; }
+button.key:hover { background: var(--surface-2); }
+.swatches { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.swatch { width: 36px; min-height: 36px; padding: 0; border: 0; border-radius: var(--r-full); background: none; }
+.swatch i { display: block; width: 26px; height: 26px; margin: auto; border-radius: var(--r-full); background: var(--c); }
+.swatch[aria-checked="true"] { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--c); }
 .missing > summary { display: flex; align-items: center; gap: var(--s2); padding: var(--s3) var(--s4); cursor: pointer; color: var(--bad); list-style: none; }
 .missing > summary::-webkit-details-marker { display: none; }
 .missing > summary .fold-icon { margin-left: auto; color: var(--muted); transition: transform .16s var(--ease-out); }
@@ -378,7 +388,7 @@ input.check { width: 20px; height: 20px; min-height: 0; padding: 0; accent-color
 .steps li + li::before { content: "›"; color: var(--muted); font-size: var(--t-xs); }
 .steps li button { min-height: 24px; padding: 0 var(--s2); gap: 3px; border: 1px solid transparent; border-radius: var(--r-full); background: none; color: var(--muted); font-size: var(--t-xs); font-weight: 500; }
 .steps li button:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
-.steps li button.next { border-color: var(--line); color: var(--text); }
+.steps li button.current { border-color: var(--line); color: var(--text); }
 .steps li button.done { background: var(--ok-soft); color: var(--ok); font-weight: 600; }
 .steps li button:disabled { opacity: 1; }
 .steps li .icon { width: 11px; height: 11px; stroke-width: 3; }
@@ -386,9 +396,39 @@ input.check { width: 20px; height: 20px; min-height: 0; padding: 0; accent-color
 .step-edit:hover { background: none; color: var(--accent); }
 .side-foot { display: grid; gap: var(--s2); }
 .side-foot .sync-alert, .side-foot .sync-time { margin-bottom: 0; }
-.status-cell .step-edit { display: block; padding: 0; }
 /* the edit link appears with the row it belongs to */
-.kpi-items tr:not(:hover):not(:focus-within) .step-edit { opacity: 0; }
+.kpi-items tr:not(:hover):not(:focus-within) .step-edit:not(.show) { opacity: 0; }
+
+/* a bonus item's stages: dots joined by a line, the done part green */
+/* the stages wrap freely: each is a dot and its name, no joining line to be left at a line start */
+.track { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; margin: 6px 0 0 -3px; padding: 0; list-style: none; }
+.track li { display: flex; align-items: center; }
+.track button { min-height: 26px; padding: 0 var(--s2) 0 3px; gap: 6px; border: 0; border-radius: var(--r-full); background: none; color: var(--muted); font-size: var(--t-sm); font-weight: 500; }
+.track button:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
+.track button:disabled { opacity: 1; cursor: default; }
+.track .dot { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--control); background: var(--surface); flex: none; }
+.track .dot .icon { width: 11px; height: 11px; stroke-width: 3.5; }
+.track li.done .dot { border-color: var(--ok); background: var(--ok); color: var(--surface); }
+.track li.done button { color: var(--ok); font-weight: 600; }
+.track li.current .dot { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.track li.current button { color: var(--text); font-weight: 600; }
+.track.off { opacity: .5; }
+
+.prog { display: inline-grid; gap: 5px; justify-items: center; }
+.prog b { font-size: var(--t-md); font-weight: 700; font-variant-numeric: tabular-nums; }
+.prog.full b { color: var(--ok); }
+.prog.off b { color: var(--muted); }
+.segs { display: flex; gap: 3px; }
+.segs i { width: 10px; height: 4px; border-radius: 2px; background: var(--line); }
+.segs i.on { background: var(--ok); }
+
+.status-cell { width: 1%; white-space: nowrap; }
+.row-actions { display: grid; justify-items: start; gap: 4px; margin-top: var(--s2); }
+.next-step { min-height: 30px; padding: 0 var(--s3) 0 var(--s2); gap: 5px; font-size: var(--t-sm); }
+.next-step .icon { width: 14px; height: 14px; stroke-width: 3; color: var(--ok); }
+.row-more { display: flex; gap: var(--s3); }
+.row-more .step-edit { padding: 0; }
+.kpi-items tr.off .strong, .kpi-items tr.off summary { color: var(--muted); }
 .rail-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s2); }
 .rail-head b { font-size: var(--t-lg); font-weight: 700; }
 .minus { color: var(--bad); font-weight: 700; }

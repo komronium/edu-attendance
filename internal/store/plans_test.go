@@ -49,3 +49,15 @@ func TestCourseTopics(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 }
+
+func TestSubjectStyles(t *testing.T) {
+	s := open(t)
+	check(s.SetSubjectStyles(map[string]any{"Algoritmlash": map[string]any{"color": "c1"}, "Tibbiyotda axborot texnologiyalar": map[string]any{"color": "c2", "short": " Tibbiyot  AT "}}))
+	check(s.SetSubjectStyles(map[string]any{"Algoritmlash": map[string]any{"color": "c4"}}))
+	got := must(s.SubjectStyles())
+	if len(got) != 2 || got["Algoritmlash"].Color != "c4" || got["Tibbiyotda axborot texnologiyalar"] != (SubjectStyle{"c2", "Tibbiyot AT"}) {
+		t.Fatalf("%+v", got)
+	}
+	wantInvalid(t, s.SetSubjectStyles(map[string]any{"A": map[string]any{"color": "c9"}}), "rang noto'g'ri")
+	wantInvalid(t, s.SetSubjectStyles("x"), "uslublar noto'g'ri")
+}

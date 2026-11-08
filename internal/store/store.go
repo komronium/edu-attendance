@@ -402,7 +402,8 @@ func (s *Store) KPIProgress() ([]KPIProgress, error) {
 	})
 }
 
-// SetKPIProgress saves the finished stages of an item for a month; 0 clears it.
+// SetKPIProgress saves the finished stages of an item for a month; 0 clears it, and -1 marks the item
+// as one that cannot be done this month (it then leaves the open items and the reminders).
 func (s *Store) SetKPIProgress(period, item, step any) error {
 	p, _ := period.(string)
 	if !periodRe.MatchString(p) {
@@ -413,7 +414,7 @@ func (s *Store) SetKPIProgress(period, item, step any) error {
 		return err
 	}
 	n, ok := step.(float64)
-	if !ok || n < 0 || n > 12 || n != float64(int(n)) {
+	if !ok || n < -1 || n > 12 || n != float64(int(n)) {
 		return invalid("bosqich noto'g'ri")
 	}
 	if n == 0 {

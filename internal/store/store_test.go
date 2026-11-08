@@ -330,6 +330,8 @@ func TestKPIProgressAndSteps(t *testing.T) {
 	if got := must(s.KPIProgress()); len(got) != 1 || got[0].Step != 3 {
 		t.Fatalf("%+v", got)
 	}
+	check(s.SetKPIProgress("2026-12", "Maqola", -1.0)) // cannot be done this month
+	wantInvalid(t, s.SetKPIProgress("2026-12", "Maqola", -2.0), "bosqich noto'g'ri")
 	wantInvalid(t, s.SetKPIProgress("x", "Maqola", 1.0), "oy noto'g'ri")
 	wantInvalid(t, s.SetKPIProgress("2026-11", "Maqola", 1.5), "bosqich noto'g'ri")
 	wantInvalid(t, s.SetKPIProgress("2026-11", "Maqola", "2"), "bosqich noto'g'ri")

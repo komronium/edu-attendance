@@ -584,6 +584,17 @@ func (s *Server) routes() {
 		}
 		return 200, okBody, db.SetCourseTopics(b["subject"], topics)
 	})
+	s.handle("GET /api/subject-styles", func(r *http.Request) (int, any, error) {
+		styles, err := db.SubjectStyles()
+		return 200, map[string]any{"styles": styles}, err
+	})
+	s.handle("PUT /api/subject-styles", func(r *http.Request) (int, any, error) {
+		b, err := body(r)
+		if err != nil {
+			return 0, nil, err
+		}
+		return 200, okBody, db.SetSubjectStyles(b["styles"])
+	})
 	s.handle("GET /api/kpi-works", func(r *http.Request) (int, any, error) {
 		works, err := db.KPIWorks()
 		return 200, map[string]any{"works": works}, err
