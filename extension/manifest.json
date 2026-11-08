@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "attendance: digital.oxu.uz sinxronlash",
-  "version": "2.0.0",
+  "version": "2.0.2",
   "description": "digital.oxu.uz ga o'zingiz kirasiz (login, parol, robot tekshiruvi). Kirganingizdan keyin sessiya attendance ilovasiga o'zi uzatiladi va sinxronlanadi.",
   "permissions": [
     "cookies",

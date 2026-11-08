@@ -18,6 +18,15 @@ const set = (k, v) => (v === null ? chrome.storage.session.remove(k) : chrome.st
 // pending: {cookie, sig, at}: a cookie waiting for a logged-in attendance page
 // last: {sig, at, ok}: the last cookie sent
 
+// a short trail of what happened, without cookie values, for finding out why a sync did not come
+async function trace(event, data) {
+  try {
+    const { trace: list = [] } = await chrome.storage.local.get("trace");
+    list.push([new Date().toISOString(), event, data ?? null]);
+    await chrome.storage.local.set({ trace: list.slice(-40) });
+  } catch (err) { /* only a diagnostic */ }
+}
+
 async function appOrigin() {
   const { app } = await chrome.storage.local.get("app");
   return app || DEFAULT_APP;
@@ -48,42 +57,56 @@ async function start(appTab) {
 }
 
 // a digital.oxu.uz tab found the session logged in
-async function loggedIn(siteTab) {
-  const cookies = await chrome.cookies.getAll({ url: SITE }); // includes HttpOnly ones
+// pageCookie: the site tab's document.cookie. The cookies API also sees HttpOnly cookies, but Chrome
+// leaves out a cookie first set in a cross-site context (has_cross_site_ancestor), which is how the
+// site's ASP session cookie can end up; the session cookie is not HttpOnly, so the page has it.
+async function loggedIn(siteTab, pageCookie) {
+  let cookies = await chrome.cookies.getAll({ url: SITE }); // includes HttpOnly ones
+  if (!cookies.length) cookies = await chrome.cookies.getAll({ url: SITE, partitionKey: {} }).catch(() => []);
+  if (!cookies.length && pageCookie) {
+    cookies = pageCookie.split(";").map((x) => x.trim()).filter((x) => x.includes("="))
+      .map((x) => ({ name: x.slice(0, x.indexOf("=")), value: x.slice(x.indexOf("=") + 1) }));
+  }
+  trace("cookies", { n: cookies.length, names: cookies.map((c) => c.name), fromPage: !!pageCookie });
   if (!cookies.length) return;
   const sig = signature(cookies);
   const flow = (await get("flow")) || {};
   const asked = flow.site === siteTab; // the app button opened this tab: the teacher wants a sync now
   const last = await get("last");
-  if (!asked && last && last.sig === sig && last.ok && Date.now() - last.at < SAME_COOKIE_QUIET) return; // already synced
+  if (!asked && last && last.sig === sig && last.ok && Date.now() - last.at < SAME_COOKIE_QUIET) return trace("skip", "already synced"); // already synced
   const pending = await get("pending");
-  if (pending && pending.sig === sig && Date.now() - pending.at < 20000) return; // being sent right now
+  if (pending && pending.sig === sig && Date.now() - pending.at < 20000) return trace("skip", "being sent"); // being sent right now
   await set("pending", { cookie: cookies.map((c) => c.name + "=" + c.value).join("; "), sig, at: Date.now() });
   badge("…", "#0066cc", "sinxronlanmoqda");
 
-  let app = (await tabExists(flow.app)) ? flow.app : null;
-  if (!app) {
-    const open = await chrome.tabs.query({ url: APP_URLS });
-    const origin = await appOrigin();
-    const best = open.find((t) => t.url.startsWith(origin)) || open[0];
-    if (best) app = best.id;
-  }
-  if (app) {
-    await set("flow", { ...flow, app, opened: !!flow.opened && flow.app === app });
-    return deliver(app);
+  // every open attendance tab, the remembered address first; one opened before the extension was
+  // last reloaded has lost its bridge and does not answer, so the next one is tried
+  const origin = await appOrigin();
+  const open = (await chrome.tabs.query({ url: APP_URLS })).sort((a, b) => b.url.startsWith(origin) - a.url.startsWith(origin));
+  const tabs = [...new Set([(await tabExists(flow.app)) ? flow.app : null, ...open.map((t) => t.id)].filter(Boolean))];
+  trace("targets", { flowApp: flow.app ?? null, tabs, asked });
+  for (const app of tabs) {
+    if (await deliver(app)) {
+      await set("flow", { ...flow, app, opened: !!flow.opened && flow.app === app });
+      return;
+    }
   }
   const tab = await chrome.tabs.create({ url: (await appOrigin()) + "#/kabinet", active: false });
   await set("flow", { ...flow, app: tab.id, opened: true });
   // the new tab says "ready" once it is loaded and logged in; deliver() runs then
 }
 
+// true when the tab's page took the cookie
 async function deliver(appTab) {
   const pending = await get("pending");
-  if (!pending) return;
+  if (!pending) return false;
   try {
-    await chrome.tabs.sendMessage(appTab, { type: "cookie", cookie: pending.cookie });
-  } catch (err) { // the tab is still loading, or not an attendance page after all: its "ready" will come
-    console.log("attendance: app tab not reachable yet:", String(err));
+    const answer = await chrome.tabs.sendMessage(appTab, { type: "cookie", cookie: pending.cookie });
+    trace(answer && answer.taken ? "delivered" : "not taken", appTab);
+    return !!(answer && answer.taken);
+  } catch (err) { // no bridge in that tab: still loading, or opened before the extension was reloaded
+    trace("deliver failed", { tab: appTab, err: String(err) });
+    return false;
   }
 }
 
@@ -117,19 +140,16 @@ async function ready(tab) {
   if (!pending) return;
   if (Date.now() - pending.at > 30 * 60e3) { await set("pending", null); return; } // too old to trust
   const flow = (await get("flow")) || {};
-  if (flow.app !== tab.id) {
-    if (await tabExists(flow.app)) return; // the tab the cookie is meant for will say "ready" itself
-    await set("flow", { ...flow, app: tab.id, opened: false });
-  }
-  deliver(tab.id);
+  if (!(await deliver(tab.id))) return;
+  if (flow.app !== tab.id) await set("flow", { ...flow, app: tab.id, opened: false }); // the result comes from this tab
 }
 
 chrome.runtime.onMessage.addListener((msg, sender) => {
   if (!msg || !sender.tab) return;
-  if (msg.type === "start") start(sender.tab.id);
-  else if (msg.type === "page") loggedIn(sender.tab.id);
-  else if (msg.type === "ready") ready(sender.tab);
-  else if (msg.type === "result") result(sender.tab.id, msg.ok === true, msg.quiet === true);
+  trace("msg", { type: msg.type, tab: sender.tab.id, url: (sender.tab.url || "").slice(0, 60), ok: msg.ok, quiet: msg.quiet });
+  const run = { start: () => start(sender.tab.id), page: () => loggedIn(sender.tab.id, typeof msg.cookie === "string" ? msg.cookie : ""), ready: () => ready(sender.tab),
+    result: () => result(sender.tab.id, msg.ok === true, msg.quiet === true) }[msg.type];
+  if (run) run().catch((err) => trace("error", { type: msg.type, err: String(err) }));
 });
 
 // a pending cookie whose app tab needs the app password: show it on the toolbar icon

@@ -17,8 +17,10 @@ const loginForm = () => !!document.querySelector('input[type="password"]');
 
 (async () => {
   for (let i = 0; i < TRIES; i++) {
-    if (!document.hidden && (await loggedIn().catch(() => false))) {
-      chrome.runtime.sendMessage({ type: "page" }).catch(() => {});
+    // the first check runs in a background tab too; the repeated ones only while the tab is in view
+    if ((i === 0 || !document.hidden) && (await loggedIn().catch(() => false))) {
+      // the page's own cookies go along: the cookies API can miss the session cookie (see background.js)
+      chrome.runtime.sendMessage({ type: "page", cookie: document.cookie }).catch(() => {});
       return;
     }
     if (!loginForm() && i > 0) return; // not logged in and no form to log in with: nothing to wait for
