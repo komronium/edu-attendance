@@ -24,6 +24,34 @@ Environment (each has a matching flag): `ATTENDANCE_DATA` (default `/var/lib/att
 `ATTENDANCE_BIND` (default `127.0.0.1`), `ATTENDANCE_PORT` (default `8766`),
 `ATTENDANCE_PASSWORD` (for `set-password`), `ATTENDANCE_SECURE_COOKIE=1` (when served over HTTPS).
 
+## Login to digital.oxu.uz (Chrome extension)
+
+Install the extension once: `chrome://extensions` → turn on Developer mode → Load unpacked → choose
+the `extension/` folder (after an update, press the reload arrow on its card).
+
+Then just open digital.oxu.uz in any tab and log in by hand (login, password and the robot check
+stay manual). Once the site answers as logged in, the extension reads the session cookie (including
+the HttpOnly one a page script cannot see) and hands it to an attendance tab, which sends it through
+the usual sync request, so the owner-ID check still applies. If no attendance tab is open, the one
+used last (default: the live site) is opened in the background and closed after the sync; if it asks
+for the app password first, the cookie waits until you have logged in there. The toolbar icon shows
+`…` while syncing, `✓` when done and `!` when something needs you. The same session is not sent
+twice within six hours. The Kabinet button "digital.oxu.uz ga kirish" still works and syncs at once.
+Without the extension the cookie can still be pasted by hand.
+
+It works on `http://localhost`, `http://127.0.0.1` (any port) and the live site. For another address,
+add that origin to `host_permissions` and `content_scripts[0].matches` in `extension/manifest.json`
+and reload the extension. Only pages on those origins receive the cookie.
+
+## Lesson plans
+
+"Dars rejasi" (`#/reja`) holds the teacher's own preparation for every lesson, the site's too: a
+topic, a few points and "Reja bor" / "Tayyor". A plan is keyed by date and timetable para
+(`lesson_plans`), so it exists before any attendance. Starting attendance takes the plan's topic.
+After the lesson its outcome is marked ("O'tildi", "Qisman", "Keyingi darsga qoldi"); unticked points
+move to the next lesson of the same subject and group. Each subject can have a semester topic list
+(`course_topics`); the page shows how many are taught and, as an estimate, how many teaching days behind.
+
 ## Build and test
 
     make test
@@ -37,6 +65,10 @@ directory. This replaces the old Python version, whose data directory keeps work
 `auth.json` and the database are read unchanged, and logged-in browsers stay logged in. A database
 file named `davomat.sqlite3` is still used if there is no `attendance.sqlite3` next to it.
 Stop the old service before starting the new one: both must not write the same database.
+
+Live at https://davomat.lidersement.uz: `attendance.service` runs `/opt/attendance/attendance` on
+127.0.0.1:8766 behind nginx, with its data in `/var/lib/davomat`. To update, run `make linux`, copy the
+binary over and restart the service. Back up the database first; never copy a laptop database over it.
 
 Production data (the sqlite db and `auth.json`) is intentionally NOT in this repo.
 
@@ -60,7 +92,8 @@ timetable and is not counted in the teaching load, and can be restored below the
 The Yuklama page shows planned, taught and remaining hours per subject and group. Planned hours come
 from the site's load. The site has no taught-hours figure, so they are counted from the semester's
 schedule at 2 hours per para, which matches the site's plans exactly for finished subjects. Hours held
-but listed as unsaved on the site are shown separately. Mustaqil ta'lim is not scheduled and is not
+but listed as unsaved on the site are shown separately. A closed group's plan is taken as the hours it
+actually got, with the site's figure in a tooltip. Mustaqil ta'lim is not scheduled and is not
 counted. 2-ATT-25 is not in the site's load: its taught hours are finished lessons in this app, and
 its planned hours default to an estimate of 200 (`COURSE.planHours`) and can be changed on the page.
 

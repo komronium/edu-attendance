@@ -12,3 +12,4 @@ oxu_cookie.tmp
 .claude/skills/
 .claude/settings.local.json
 .impeccable/config.local.json
+.impeccable/mocks/

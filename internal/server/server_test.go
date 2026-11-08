@@ -279,7 +279,7 @@ func TestEmptyListsAreArraysNotNull(t *testing.T) {
 	e := newEnv(t)
 	e.login()
 	for path, key := range map[string]string{"/api/students": "students", "/api/sessions": "sessions", "/api/retakes": "items",
-		"/api/rooms": "rooms", "/api/retake-sessions": "sessions"} {
+		"/api/rooms": "rooms", "/api/retake-sessions": "sessions", "/api/plans": "plans"} {
 		_, out := e.api("GET", path, "")
 		if arr, ok := out[key].([]any); !ok || len(arr) != 0 {
 			t.Errorf("%s: %s should be [], got %v", path, key, out[key])
@@ -354,3 +354,23 @@ func TestOxuSync(t *testing.T) {
 func fmtAny(v any) string { b, _ := json.Marshal(v); return string(b) }
 
 func itoa(n int) string { return strconv.Itoa(n) }
+
+func TestPlansAPI(t *testing.T) {
+	e := newEnv(t)
+	e.login()
+	if st, out := e.api("PUT", "/api/plans", `{"date":"2026-11-09","para":3,"subject":"Algoritmlash","group":"2-ATT-25","topic":"Sikllar","items":[{"text":"for"}],"ready":true}`); st != 200 {
+		t.Fatalf("%d %v", st, out)
+	}
+	if st, out := e.api("PUT", "/api/course-topics", `{"subject":"Algoritmlash","topics":["Kirish","Sikllar"]}`); st != 200 {
+		t.Fatalf("%d %v", st, out)
+	}
+	if st, out := e.api("PUT", "/api/course-topics", `{"subject":"Algoritmlash","topics":"x"}`); st != 400 {
+		t.Fatalf("%d %v", st, out)
+	}
+	st, out := e.api("GET", "/api/plans", "")
+	plans, _ := out["plans"].([]any)
+	topics, _ := out["topics"].(map[string]any)
+	if st != 200 || len(plans) != 1 || len(topics["Algoritmlash"].([]any)) != 2 {
+		t.Fatalf("%d %v", st, out)
+	}
+}

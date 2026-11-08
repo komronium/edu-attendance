@@ -1,4 +1,4 @@
-.PHONY: build linux test demo clean
+.PHONY: build linux test demo run clean
 
 build:
 	go build -o bin/attendance .
@@ -12,6 +12,9 @@ test:
 
 demo: build
 	./bin/attendance demo --no-login
+
+run: build
+	./bin/attendance run --data ./data
 
 clean:
 	rm -rf bin

@@ -243,6 +243,41 @@ func (s *Store) Seed() error {
 			}
 		}
 	}
+	// the semester's topic list, and plans for the next course lessons (Monday to Thursday, paras 3 and 4)
+	topics := make([]any, 0, len(demoTopics)+4)
+	for _, t := range append(append([]string{}, demoTopics...), "Rekursiya", "Saralash algoritmlari", "Qidiruv algoritmlari", "Yakuniy loyiha") {
+		topics = append(topics, t)
+	}
+	if err := s.SetCourseTopics("Algoritmlash", topics); err != nil {
+		return err
+	}
+	plans := []struct {
+		topic string
+		items []string
+		ready bool
+	}{
+		{"Rekursiya", []string{"Rekursiya nima", "Faktorial misoli", "Stek chuqurligi", "Uy vazifasi"}, true},
+		{"Rekursiya", []string{"Fibonachchi", "Amaliy topshiriq"}, false},
+	}
+	n := 0
+	for day := today.AddDate(0, 0, 1); n < len(plans) && day.Before(today.AddDate(0, 0, 14)); day = day.AddDate(0, 0, 1) {
+		if wd := day.Weekday(); wd < time.Monday || wd > time.Thursday {
+			continue
+		}
+		for _, para := range []float64{3, 4} {
+			if n == len(plans) {
+				break
+			}
+			items := make([]any, len(plans[n].items))
+			for i, t := range plans[n].items {
+				items[i] = map[string]any{"text": t}
+			}
+			if err := s.SetLessonPlan(day.Format("2006-01-02"), para, "Algoritmlash", "2-ATT-25", plans[n].topic, items, plans[n].ready, ""); err != nil {
+				return err
+			}
+			n++
+		}
+	}
 	yesterday := today.AddDate(0, 0, -1).Format("2006-01-02")
 	for n, d := range retakes { // half of the debts already retaken, with time and place
 		if err := s.SetRetake(d.session, d.student, true, yesterday, fmt.Sprintf("14:%02d", 10+n*5%50), "K4 / 309"); err != nil {

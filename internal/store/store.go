@@ -61,6 +61,12 @@ create table if not exists kpi_works (
 );
 create table if not exists kpi_steps (item text primary key, steps text not null);
 create table if not exists settings (key text primary key, value text not null);
+create table if not exists lesson_plans (
+    date text not null, para integer not null, subject text not null, grp text not null default '',
+    topic text not null default '', items text not null default '[]', ready integer not null default 0,
+    outcome text not null default '', updated_at real not null, primary key (date, para)
+);
+create table if not exists course_topics (subject text primary key, topics text not null);
 create table if not exists oxu_snapshot (
     id integer primary key check (id = 1), synced_at real not null, data text not null
 );

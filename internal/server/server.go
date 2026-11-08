@@ -20,6 +20,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"time"
 
 	"attendance/internal/auth"
 	"attendance/internal/oxu"
@@ -556,6 +557,33 @@ func (s *Server) routes() {
 		}
 		return 200, okBody, db.SetLessonCancelled(b["date"], b["para"], b["subject"], store.Truthy(b["cancelled"]))
 	})
+	// the teacher's own lesson plans and each subject's topic list
+	s.handle("GET /api/plans", func(r *http.Request) (int, any, error) {
+		plans, err := db.LessonPlans()
+		if err != nil {
+			return 0, nil, err
+		}
+		topics, err := db.CourseTopics()
+		return 200, map[string]any{"plans": plans, "topics": topics}, err
+	})
+	s.handle("PUT /api/plans", func(r *http.Request) (int, any, error) {
+		b, err := body(r)
+		if err != nil {
+			return 0, nil, err
+		}
+		return 200, okBody, db.SetLessonPlan(b["date"], b["para"], b["subject"], b["group"], b["topic"], b["items"], b["ready"], b["outcome"])
+	})
+	s.handle("PUT /api/course-topics", func(r *http.Request) (int, any, error) {
+		b, err := body(r)
+		if err != nil {
+			return 0, nil, err
+		}
+		topics, ok := b["topics"].([]any)
+		if !ok && b["topics"] != nil {
+			return 0, nil, &store.ValidationError{Msg: "mavzular ro'yxat bo'lishi kerak"}
+		}
+		return 200, okBody, db.SetCourseTopics(b["subject"], topics)
+	})
 	s.handle("GET /api/kpi-works", func(r *http.Request) (int, any, error) {
 		works, err := db.KPIWorks()
 		return 200, map[string]any{"works": works}, err
@@ -622,11 +650,15 @@ func (s *Server) routes() {
 			return 0, nil, err
 		}
 		var warnings []string
-		if cookie, _ := b["cookie"].(string); strings.TrimSpace(cookie) != "" {
+		cookie, _ := b["cookie"].(string)
+		fresh := strings.TrimSpace(cookie) != ""
+		start := time.Now()
+		if fresh {
 			warnings, err = s.sync.Replace(r.Context(), cookie)
 		} else {
 			warnings, err = s.sync.Now(r.Context())
 		}
+		slog.Info("oxu sync", "new_cookie", fresh, "ok", err == nil, "err", err, "took", time.Since(start).Round(time.Millisecond))
 		var wrong *oxu.WrongAccountError
 		switch {
 		case err == nil:

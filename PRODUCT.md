@@ -39,11 +39,11 @@ Desktop only. Phone layouts are out of scope by the owner's decision.
 - The app must never write to the site, and never hold data from any account but the owner's (ID checked on every sync). Salary figures are never read.
 - Terms: dars, para (1 to 9, with fixed university times), guruh, davomat, qarz, yuklama, ustama, Ilmiy KPI, band, Kurs (the 2-ATT-25 group's section).
 - 2-ATT-25 attendance is taken in this app (Algoritmlash, Monday to Thursday, paras 3 and 4, K4 / 309). All other lessons are taken on the site. 2-ATT-25 is not in the site's load, so its plan hours are the owner's estimate.
-- Undecided: moving from demo mode to a permanent data folder, and hosting on the VPS.
+- Hosted at https://davomat.lidersement.uz on the VPS. Its database is the real record (students, lessons, attendance); ./data on the laptop is only for development.
 
 ## Brand Commitments
 
-Name: attendance (lowercase), chosen over "davomat". Typeface: Public Sans, chosen by the owner after trying several; it has tabular digits and Uzbek characters. Direction chosen by the owner: refined and calm, simple, clean, solid, modern.
+Name: attendance (lowercase), chosen over "davomat". Typeface: Public Sans, chosen by the owner after trying several; it has tabular digits and Uzbek characters. Direction chosen by the owner: refined and calm, simple, clean, solid, modern. Visual references chosen by the owner: Apple Calendar and Reminders, Vercel, Stripe. No metaphors or themed worlds.
 
 ## Evidence on Hand
 
