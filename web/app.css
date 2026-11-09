@@ -555,9 +555,16 @@ ul.history { display: grid; gap: var(--s2); margin-top: var(--s3); }
 
 /* ------------------------------------------------------------ lesson plans */
 .section-title { font-size: var(--t-lg); }
-.plans td:first-child, .plans td:nth-child(2) { width: 1%; }
-.plans td.right { width: 1%; }
-.plans .key { margin-right: 2px; }
+.plans td.para, .plans td.right { width: 1%; }
+.plans td.para { vertical-align: top; padding-top: 14px; }
+.plans td.lesson { width: 38%; min-width: 240px; }
+.plans td.lesson .key { align-items: flex-start; }
+.plans td.lesson .key i { flex: none; margin-top: 0.42em; }
+.plans td.lesson small, .plans td.topic small { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: 2px; font-size: var(--t-sm); }
+.plans td.lesson small { padding-left: 16px; }
+.plans .ordinal { font-weight: 600; color: var(--accent); }
+.plans tr.group th { font-weight: 600; }
+.plans tbody:first-child tr.group th { border-top: 0; }
 .plans td .chip { cursor: pointer; }
 .hero-plan { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s2); margin-top: var(--s1); font-size: var(--t-sm); }
 .hero-plan .state-line { font-size: var(--t-sm); }

@@ -980,23 +980,49 @@ async function plansView() {
     .filter((e) => paraOver(e, t, now) && planStage(planOf(e)) !== "none" && !planOf(e).outcome).sort((a, b) => byTime(b, a));
   const ready = coming.filter((e) => planStage(planOf(e)) === "ready").length;
 
-  const when = (e) => capital(relDay(e.date) || (e.date === shiftDay(t, 1) ? "ertaga" : shortDate(e.date) + ", " + weekday(e.date).slice(0, 3)));
+  const dayTitle = (d) => (relDay(d) ? capital(relDay(d)) + ", " : d === shiftDay(t, 1) ? "Ertaga, " : "") + longDay(d);
+
+  // which lesson of its kind each one is this semester: "5-amaliy", "3-ma'ruza"; every para counts, a cancelled one does not
+  const start = (data && data.load && data.load.start) || ctx.firstDay || t;
+  const lastDay = shiftDay(t, PLAN_DAYS - 1);
+  const span = [];
+  for (let d = start; d <= lastDay && span.length < 240; d = shiftDay(d, 1)) span.push(d);
+  const all = entriesFor(span, ctx).sort(byTime);
+  const kindKey = (e) => { const i = entryInfo(e); return i.subject + "|" + i.group + "|" + i.type; };
+  const entryKey = (e) => e.date + "|" + e.para + "|" + e.kind;
+  const counts = new Map(), number = new Map();
+  for (const e of all) { const k = kindKey(e), n = (counts.get(k) || 0) + 1; counts.set(k, n); number.set(entryKey(e), n); }
+  const planned = new Map();   // the load's paras per class, when the site gives them
+  for (const item of (data && data.load && data.load.items) || []) planned.set(canonSubject(item.subject) + "|" + item.group + "|" + fmtType(item.type), Number(item.hours) / HOURS_PER_PARA);
+  const ordinal = (e) => {
+    const n = number.get(entryKey(e)), info = entryInfo(e);
+    if (!n || !info.type) return null;
+    const of = planned.get(kindKey(e));
+    return h("span", { class: "ordinal", title: of ? "Semestrda " + of + " ta " + info.type.toLowerCase() : null, text: n + "-" + info.type.toLowerCase() });
+  };
+
+  const colorOf = subjectColors(data);
   const row = (e, action) => {
     const p = planOf(e), info = entryInfo(e), n = p ? p.items.length : 0;
     const open = () => openPlan(e, redraw, sessions);
     return h("tr", { class: "tap", onclick: (ev) => { if (!ev.target.closest("button")) open(); } },
-      h("td", { class: "nowrap strong", text: when(e) }),
-      h("td", { class: "nowrap muted", text: e.para + "-para" }),
-      h("td", { class: "nowrap" }, h("span", { class: "key " + subjectColors(data)(info.name) }, h("i")), info.name, h("span", { class: "muted", text: info.group ? " · " + info.group : "" })),
-      h("td", { class: "clip" + (p && p.topic ? "" : " muted"), text: p && p.topic ? p.topic : "–" }),
-      h("td", { class: "nowrap muted num", text: n ? n + " ta band" : "" }),
+      h("td", { class: "nowrap strong para", text: e.para + "-para" }),
+      h("td", { class: "lesson" }, h("span", { class: "key " + colorOf(info.name) }, h("i"), info.name),
+        h("small", {}, ordinal(e), info.group ? h("span", { class: "muted", text: info.group }) : null)),
+      h("td", { class: "topic" + (p && p.topic ? "" : " muted") }, p && p.topic ? p.topic : "Mavzu yozilmagan",
+        n ? h("small", { class: "muted", text: n + " ta band" }) : null),
       h("td", { class: "right nowrap" }, action || h("button", { type: "button", class: "quiet", onclick: open }, planChip(p))));
   };
-  const table = (rows) => h("div", { class: "card flush" }, h("table", { class: "plans" }, h("tbody", {}, rows)));
+  // one heading per day, the lessons under it in para order
+  const table = (list) => {
+    const days = [...new Set(list.map((x) => x.date))];
+    return h("div", { class: "card flush" }, h("table", { class: "plans" }, days.map((d) => h("tbody", {},
+      h("tr", { class: "group" }, h("th", { colspan: "4", scope: "colgroup", text: dayTitle(d) })),
+      list.filter((x) => x.date === d).sort((a, b) => a.para - b.para).map((x) => x.row)))));
+  };
   const outcomeBtn = (e) => h("button", { type: "button", class: "quiet", text: "Natijani belgilash", onclick: () => openPlan(e, redraw, sessions) });
 
   // every class taught this semester, with how far its topic list has got
-  const start = (data && data.load && data.load.start) || ctx.firstDay || t;
   const days = [];
   for (let d = start; d <= t && days.length < 200; d = shiftDay(d, 1)) days.push(d);
   const classes = new Map();
@@ -1033,9 +1059,9 @@ async function plansView() {
   });
 
   show(pageHead("Dars rejasi", "Keyingi " + PLAN_DAYS + " kun · " + coming.length + " ta dars" + (!coming.length ? "" : ready ? ", " + ready + " tasiga tayyor" : ", hali birortasiga tayyor emas")),
-    recent.length ? h("section", { "aria-labelledby": "res-h", class: "stack" }, h("h2", { id: "res-h", class: "section-title", text: "Natijasi belgilanmagan" }), table(recent.map((e) => row(e, outcomeBtn(e))))) : null,
+    recent.length ? h("section", { "aria-labelledby": "res-h", class: "stack" }, h("h2", { id: "res-h", class: "section-title", text: "Natijasi belgilanmagan" }), table(recent.map((e) => ({ date: e.date, para: e.para, row: row(e, outcomeBtn(e)) })))) : null,
     h("section", { "aria-labelledby": "next-h", class: "stack" }, h("h2", { id: "next-h", class: "section-title", text: "Kelgusi darslar" }),
-      coming.length ? table(coming.map((e) => row(e))) : h("p", { class: "card empty", text: "Keyingi " + PLAN_DAYS + " kunda dars yo'q." })),
+      coming.length ? table(coming.map((e) => ({ date: e.date, para: e.para, row: row(e) }))) : h("p", { class: "card empty", text: "Keyingi " + PLAN_DAYS + " kunda dars yo'q." })),
     h("section", { "aria-labelledby": "course-h", class: "stack" }, h("h2", { id: "course-h", class: "section-title", text: "Kurs rejasi" }),
       h("p", { class: "sub", text: "O'tilgan mavzular semestr ro'yxatiga qarab. «Orqada» taxminiy: bir dars kuni bir mavzu deb hisoblanadi." }),
       courseRows.length ? h("div", { class: "card flush" }, h("table", {}, h("tbody", {}, courseRows))) : h("p", { class: "card empty", text: "Bu semestrda dars topilmadi." })));
@@ -1290,7 +1316,8 @@ window.addEventListener("message", async (e) => {
 window.postMessage({ source: "attendance-app", type: "ready" }, location.origin);
 
 async function cabinetView() {
-  const [{ data, synced_at }, st] = await Promise.all([api("GET", "/api/oxu"), api("GET", "/api/oxu/status")]);
+  const [{ data, synced_at }, st, { sessions }, { hours: coursePlan }, { items: cancelledList }, { marks }] = await Promise.all([api("GET", "/api/oxu"), api("GET", "/api/oxu/status"),
+    api("GET", "/api/sessions"), api("GET", "/api/course-plan"), api("GET", "/api/cancelled"), api("GET", "/api/kpi-marks")]);
   const finish = async (res) => {
     if (!res) return cabinetView();
     await cabinetView(); refreshBadge();
@@ -1352,19 +1379,26 @@ async function cabinetView() {
   const head = pageHead("Kabinet", synced_at ? "digital.oxu.uz ma'lumotlari" : "Hali sinxronlanmagan");
   if (!data) return show(head, form, h("p", { class: "card empty", text: "Jadval, yuklama va KPI o'z bo'limlarida ko'rinadi. Yuqorida birinchi sinxronlashni bajaring." }));
 
-  // an overview: every synced section, one click away
-  const t = today(), monday = shiftDay(t, -((dowOf(t) + 6) % 7)), sunday = shiftDay(monday, 6);
-  const weekLessons = (data.lessons || []).filter((l) => l.date >= monday && l.date <= sunday).length;
+  // an overview: every synced section, one click away; the app's own group counts like the site's
+  const t = today(), clock = nowTime(), monday = shiftDay(t, -((dowOf(t) + 6) % 7));
+  const cancelled = new Set(cancelledList.map((c) => cancelKey(c.date, c.para, c.subject)));
+  const ctx = lessonContext(sessions, data, cancelled);
+  const weekLessons = entriesFor([...Array(7).keys()].map((i) => shiftDay(monday, i)), ctx).length;
+  const monthDays = [];
+  for (let d = t.slice(0, 8) + "01"; d <= t; d = shiftDay(d, 1)) monthDays.push(d);
+  const monthHours = entriesFor(monthDays, ctx).filter((e) => paraOver(e, t, clock)).length * HOURS_PER_PARA;
+  const load = data.load ? computeLoad(data, sessions, coursePlan, cancelled) : null;
+  const monthName = capital(MONTHS[Number(t.slice(5, 7)) - 1]);
   const bands = (data.kpi && data.kpi.bands) || [];
   const score = bands.reduce((n, b) => n + (Number(b.score) || 0), 0);
-  const current = (data.months || [])[0];
+  const bonus = ustamaFigure(data, marks, t.slice(0, 7));
   const card = (href, label, value, note) => h("a", { class: "tile link", href }, h("span", { class: "label", text: label }), h("b", { text: String(value) }), h("span", { class: "note", text: note }));
   show(head, form,
     h("div", { class: "overview" },
-      card("#/jadval", "Dars jadvali", weekLessons + " ta dars", "Saytdan, shu hafta"),
-      card("#/yuklama", "Yuklama", (data.load ? data.load.total : "–") + " soat", data.load ? data.load.semester : "Yo'q"),
+      card("#/jadval", "Dars jadvali", weekLessons + " ta dars", "Shu hafta, " + COURSE.group + " bilan"),
+      card("#/yuklama", "Yuklama", hrs(monthHours) + " soat", load ? monthName + "da o'tildi · semestr " + hrs(total(load.lines).plan) + " soat" : monthName + "da o'tildi"),
       card("#/ilmiy-kpi", "Ilmiy KPI", score.toFixed(2) + " ball", ((data.kpi && data.kpi.papers.length) || 0) + " ta ish"),
-      card("#/ustama", "Ustama", current ? current.percent : "–", current ? current.month + ", " + monthState(current).label.toLowerCase() : "Yo'q")));
+      card("#/ustama", "Ustama", bonus.known ? hrs(bonus.value) + "%" : "–", monthName + (bonus.onSite ? ", saytda tasdiqlangan" : ", belgilangan bandlardan"))));
 }
 
 /* ------------------------------------------------------------ scientific KPI */
@@ -1493,6 +1527,16 @@ function ustamaOpen(data, marks, month, progress) {
   const open = ((template && template.items) || []).filter((i) => Number(i.max) > 0 && !GRADED_BY_OTHERS.test(i.title) && !ticked.has(i.title) && !skipped.has(i.title) && !(sitePeriod && i.graded > 0));
   const [y, m, d] = today().split("-").map(Number);
   return { count: open.length, points: open.reduce((n, i) => n + Number(i.max), 0), days: new Date(y, m, 0).getDate() - d };
+}
+// the month's figure as the Ustama page heads it: approved by the site once it has opened the month, else what the ticked items would bring
+function ustamaFigure(data, marks, month) {
+  const periods = (data && data.periods) || [];
+  const sitePeriod = periods.find((p) => periodKey(p.label) === month), template = sitePeriod || periods[periods.length - 1];
+  const items = (template && template.items) || [];
+  const ticked = new Set(marks.filter((m) => m.period === month).map((m) => m.item));
+  const pending = items.filter((i) => Number(i.max) > 0 && !GRADED_BY_OTHERS.test(i.title) && ticked.has(i.title) && !(sitePeriod && i.graded > 0)).reduce((n, i) => n + Number(i.max), 0);
+  const approved = sitePeriod ? items.reduce((n, i) => n + (Number(i.value) || 0), 0) : 0;
+  return { onSite: !!sitePeriod, known: items.length > 0, approved, pending, value: sitePeriod ? approved : pending };
 }
 
 async function monthsView() {
@@ -1722,7 +1766,7 @@ async function homeView() {
   const load = data && data.load ? computeLoad(data, sessions, coursePlan, cancelled) : null;
   const siteSum = load ? total(load.lines.filter((l) => !l.course)) : null, courseSum = load ? total(load.lines.filter((l) => l.course)) : null;
   const score = ((data && data.kpi && data.kpi.bands) || []).reduce((n, b) => n + (Number(b.score) || 0), 0);
-  const period = ((data && data.periods) || []).slice(-1)[0];
+  const bonusNow = ustamaFigure(data, marks, t.slice(0, 7));
   const stat = (href, label, value, note) => h("a", { class: "tile link", href }, h("span", { class: "label", text: label }), h("b", { text: String(value) }), note ? h("span", { class: "note", text: note }) : null);
 
   const start = (data && data.load && data.load.start) || "";
@@ -1755,9 +1799,6 @@ async function homeView() {
   const running = upcoming && upcoming.kind === "course" && upcoming.date === t && now >= PARA_TIMES[upcoming.para][0];
   const nextAction = !running ? null : upcoming.session ? h("button", { type: "button", class: "primary", text: "Davomatni davom ettirish", onclick: () => { location.hash = "#/dars/" + upcoming.session.id; } })
     : h("button", { type: "button", class: "primary", text: "Davomatni boshlash", onclick: () => startCourse(upcoming) });
-  const periodMonth = period ? period.label.replace(/^\d+[^\p{L}]+/u, "") : "";
-  const periodRow = ((data && data.months) || []).find((m) => m.month.toLowerCase() === periodMonth.toLowerCase());
-  const periodNote = period ? periodMonth + (periodRow && /^taxminiy/i.test(periodRow.status) ? ", taxminiy" : "") : "Sinxronlanmagan";
 
   // today's lesson whose para ended with its attendance unfinished leads, unless the next one is about to start
   const mins = (x) => Number(x.slice(0, 2)) * 60 + Number(x.slice(3, 5));
@@ -1779,7 +1820,7 @@ async function homeView() {
     h("div", { class: "tiles" },
       stat("#/jadval", "Bugungi darslar", entries.length),
       stat("#/yuklama", "Qolgan yuklama", siteSum ? (courseSum.plan ? "~" : "") + hrs(siteSum.left + courseSum.left) + " soat" : "–", siteSum ? (courseSum.plan ? "Tizim " + hrs(siteSum.left) + " · kurs ~" + hrs(courseSum.left) : "") : "Sinxronlanmagan"),
-      stat("#/ustama", "Ustama", period ? period.bonus || period.score + "%" : "–", periodNote),
+      stat("#/ustama", "Ustama", bonusNow.known ? hrs(bonusNow.value) + "%" : "–", bonusNow.known ? capital(MONTHS[Number(t.slice(5, 7)) - 1]) + (bonusNow.onSite ? ", saytda tasdiqlangan" : ", belgilangan bandlardan") : "Sinxronlanmagan"),
       stat("#/ilmiy-kpi", "Ilmiy ball", score.toFixed(2), works.length ? works.length + " ta ish kuzatuvda" : null)));
 }
 
