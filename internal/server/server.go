@@ -208,6 +208,8 @@ func (s *Server) get(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 	case isPublic(p):
 		s.static(w, r, p)
+	case strings.HasPrefix(p, "/q/"): // the students' retakes page: the secret in the link is the key
+		s.publicRetakes(w, r, strings.TrimPrefix(p, "/q/"))
 	case !s.authed(r):
 		if strings.HasPrefix(p, "/api/") {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "kirish kerak"})
@@ -696,6 +698,21 @@ func (s *Server) routes() {
 	s.handle("GET /api/retakes", func(r *http.Request) (int, any, error) {
 		rt, err := db.Retakes()
 		return 200, rt, err
+	})
+	s.handle("GET /api/retake-share", func(r *http.Request) (int, any, error) {
+		sh, err := db.RetakeShare()
+		return 200, map[string]any{"share": sh}, err
+	})
+	s.handle("POST /api/retake-share", func(r *http.Request) (int, any, error) {
+		b, err := body(r)
+		if err != nil {
+			return 0, nil, err
+		}
+		sh, err := db.NewRetakeShare(b["title"], b["paras"])
+		return 200, map[string]any{"share": sh}, err
+	})
+	s.handle("DELETE /api/retake-share", func(r *http.Request) (int, any, error) {
+		return 200, okBody, db.StopRetakeShare()
 	})
 	s.handle("PUT /api/retakes/{sid}/{st}", func(r *http.Request) (int, any, error) {
 		v, err := ids(r, "sid", "st")

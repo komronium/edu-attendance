@@ -606,6 +606,20 @@ dialog h2 { font-size: 1.125rem; margin-bottom: var(--s3); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: var(--s2); margin-top: var(--s4); }
 
 /* ------------------------------------------------------------ login */
+/* the students' read-only retakes page, opened mostly on phones */
+.public-page { max-width: 760px; margin: 0 auto; padding: var(--s6) var(--s4) 48px; display: grid; gap: var(--s4); }
+.public-list { display: grid; gap: var(--s3); }
+.public-list h2 { display: flex; justify-content: space-between; align-items: center; gap: var(--s2); font-size: var(--t-md); }
+.public-list ul { display: grid; gap: var(--s2); margin-top: var(--s3); }
+.public-list li { display: grid; grid-template-columns: 11.5rem minmax(0, 1fr); gap: var(--s3); padding-top: var(--s2); border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+.public-list .when { display: grid; }
+.public-list .when small { color: var(--muted); font-size: var(--t-sm); }
+@media (max-width: 560px) {
+  .public-page { padding-top: var(--s4); }
+  .public-page .tile { padding: var(--s3); }
+  .public-list li { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .public-list .when { display: flex; gap: var(--s2); align-items: baseline; }
+}
 body.login { display: grid; place-items: center; min-height: 100vh; padding: var(--s4); }
 .login-box { width: 360px; max-width: 100%; background: var(--surface); box-shadow: var(--shadow); border-radius: var(--r-lg); padding: var(--s6) var(--s5) var(--s5); display: grid; gap: var(--s2); }
 .login-brand { display: flex; align-items: center; gap: 10px; margin-bottom: var(--s4); }

@@ -374,3 +374,45 @@ func TestPlansAPI(t *testing.T) {
 		t.Fatalf("%d %v", st, out)
 	}
 }
+
+func TestPublicRetakes(t *testing.T) {
+	e := newEnv(t)
+	if res, _ := e.do("GET", "/q/anything", ""); res.StatusCode != 404 {
+		t.Fatalf("no share yet: %d", res.StatusCode)
+	}
+	e.login()
+	e.api("POST", "/api/students", `{"names":["Valiyev Ali Karim o'g'li","Aliyev Vali"]}`)
+	_, out := e.api("POST", "/api/sessions", `{"date":"2026-10-01","para":1}`)
+	sid := itoa(int(out["id"].(float64)))
+	e.api("PUT", "/api/sessions/"+sid+"/students/1", `{"present":false}`)
+	e.api("POST", "/api/sessions/"+sid+"/finish", `{"topic":"Rekursiya"}`)
+
+	st, out := e.api("POST", "/api/retake-share", `{"title":"Algoritmlash · 2-ATT-25","paras":{"1":3,"2":4}}`)
+	if st != 200 {
+		t.Fatalf("%d %v", st, out)
+	}
+	token := out["share"].(map[string]any)["token"].(string)
+	res, page := e.do("GET", "/q/"+token, "") // no session: the link is the key
+	if res.StatusCode != 200 || res.Header.Get("Cache-Control") != "no-store" || !strings.Contains(res.Header.Get("X-Robots-Tag"), "noindex") {
+		t.Fatalf("%d %v", res.StatusCode, res.Header)
+	}
+	for _, want := range []string{"Valiyev A.", "Rekursiya", "1-oktabr, payshanba", "3-para", "Algoritmlash · 2-ATT-25"} {
+		if !strings.Contains(page, want) {
+			t.Fatalf("page lacks %q:\n%s", want, page)
+		}
+	}
+	if strings.Contains(page, "Karim") || strings.Contains(page, "Aliyev V") {
+		t.Fatalf("full name or a student with no debt on the page:\n%s", page)
+	}
+
+	// a new link retires the old one, and stopping retires both
+	_, out = e.api("POST", "/api/retake-share", `{"title":"x"}`)
+	if res, _ := e.do("GET", "/q/"+token, ""); res.StatusCode != 404 {
+		t.Fatalf("old link still works: %d", res.StatusCode)
+	}
+	fresh := out["share"].(map[string]any)["token"].(string)
+	e.api("DELETE", "/api/retake-share", "")
+	if res, _ := e.do("GET", "/q/"+fresh, ""); res.StatusCode != 404 {
+		t.Fatalf("stopped link still works: %d", res.StatusCode)
+	}
+}

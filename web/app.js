@@ -605,7 +605,8 @@ async function retakesView() {
           } }))
       : h("td", { class: "right" }, h("button", { type: "button", class: "small", text: "Qabul qilish", onclick: () => accept(x) }))));
 
-  show(pageHead("Qarzlar", COURSE.group + " · qoldirilgan darslar va ularni qayta topshirish"),
+  const shareBtn = h("button", { type: "button", text: "Talabalar uchun havola", onclick: () => shareSheet() });
+  show(pageHead("Qarzlar", COURSE.group + " · qoldirilgan darslar va ularni qayta topshirish", shareBtn),
     h("div", { class: "tiles" }, tile("Jami qoldirilgan", r.missed), tile("Topshirilgan", r.retaken), tile("Qolgan", r.owed)),
     h("div", { class: "split left" }, master,
       h("div", { class: "stack" },
@@ -614,6 +615,39 @@ async function retakesView() {
           h("thead", {}, h("tr", {}, h("th", { scope: "col", text: "Talaba" }), h("th", { scope: "col", text: "Dars" }), h("th", { scope: "col", text: "Mavzu" }), h("th", { scope: "col", class: "right", text: "Qayta topshirish" }))),
           h("tbody", {}, rows)))
           : h("p", { class: "card empty", text: rf.status === "owed" ? "Bu tanlovda qarz yo'q." : "Bu tanlovda hech narsa yo'q." }))));
+}
+
+// the students' read-only copy of this page, behind a secret link the owner hands out
+async function shareSheet() {
+  const { share } = await api("GET", "/api/retake-share");
+  const make = async () => {
+    const res = await act(() => api("POST", "/api/retake-share", { title: COURSE.subject + " · " + COURSE.group, paras: COURSE.slotOf }));
+    if (res) { say(share ? "Yangi havola tayyor, eskisi endi ochilmaydi" : "Havola tayyor", true); shareSheet(); }
+  };
+  if (!share) {
+    return openSheet("Talabalar uchun havola", h("div", { class: "stack" },
+      h("p", { text: "Talabalar havola orqali kimda nechta qarz borligini, qaysi kunlar va qaysi mavzular ekanini ko'radi. O'zgartira olmaydi." }),
+      h("p", { class: "sub", text: "Ismlar qisqa ko'rinadi (Karimov A.). Havolani faqat guruhga bering: uni bilgan har kim sahifani ochadi." }),
+      h("div", { class: "dialog-actions" }, h("button", { type: "button", text: "Yopish", onclick: () => sheetBox.close() }), h("button", { type: "button", class: "primary", text: "Havola yaratish", onclick: make }))));
+  }
+  const url = location.origin + "/q/" + share.token;
+  const input = h("input", { type: "text", readonly: true, value: url, "aria-label": "Havola", onfocus: (e) => e.target.select() });
+  const copy = h("button", { type: "button", class: "primary", text: "Nusxa olish", onclick: async () => {
+    try { await navigator.clipboard.writeText(url); say("Havola nusxalandi", true); } catch (err) { input.select(); say("Havolani belgilab, Ctrl+C bosing"); }
+  } });
+  openSheet("Talabalar uchun havola", h("div", { class: "stack" },
+    h("p", { class: "sub", text: "Shu havolani guruh chatiga yuboring. Sahifa har ochilganda hozirgi holatni ko'rsatadi; ismlar qisqa." }),
+    h("div", { class: "sync-row" }, input, copy),
+    h("p", {}, h("a", { href: url, target: "_blank", rel: "noopener", text: "Talaba ko'radigan sahifani ochish" })),
+    h("div", { class: "dialog-actions" },
+      h("button", { type: "button", class: "quiet", text: "O'chirish", onclick: async () => {
+        if (!(await ask("Havola o'chirilsinmi? Talabalar sahifani ocha olmay qoladi.", "O'chirish", true))) return;
+        if (await act(() => api("DELETE", "/api/retake-share"))) { say("Havola o'chirildi", true); sheetBox.close(); }
+      } }),
+      h("button", { type: "button", text: "Yangi havola", title: "Eski havola ishlamay qoladi", onclick: async () => {
+        if (await ask("Yangi havola yaratilsinmi? Eskisi endi ochilmaydi.", "Yangi havola")) make();
+      } }))));
+  input.select();
 }
 
 /* ------------------------------------------------------------ timetable */
