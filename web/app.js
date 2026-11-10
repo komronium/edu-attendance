@@ -1304,8 +1304,9 @@ async function loadView() {
   const site = total(lines.filter((l) => !l.course)), sums = total(lines);
   const colorOf = subjectColors(data);
   const quiet = (v) => (v ? "" : " muted");
-  const diffCell = (sum) => h("td", { class: "num" + verdictClass(sum.diff), text: sum.diff === null ? "" : signed(sum.diff) });
-  const rate = (l, sum) => h("span", { class: "rate" }, paceBar(sum.pct, needPct(sum), null, sum.plan ? 100 * (l.queued || 0) * HOURS_PER_PARA / sum.plan : 0), h("b", { text: pct1(sum.pct) }));
+  const settled = (l) => l.finished || l.closed;   // a group whose plan is done: its row shows no difference
+  const diffCell = (l, sum) => h("td", { class: "num" + (settled(l) ? "" : verdictClass(sum.diff)), text: sum.diff === null || settled(l) ? "" : signed(sum.diff) });
+  const rate = (l, sum) => h("span", { class: "rate" }, paceBar(sum.pct, settled(l) ? null : needPct(sum), null, sum.plan ? 100 * (l.queued || 0) * HOURS_PER_PARA / sum.plan : 0), h("b", { text: pct1(sum.pct) }));
   const numbers = (l, sum, planNode) => [
     h("td", { class: "num" }, planNode ?? hrs(l.plan)),
     h("td", { class: "num" + quiet(l.done), text: hrs(l.done) }),
@@ -1313,7 +1314,7 @@ async function loadView() {
     h("td", { class: "num" + quiet(l.left), text: hrs(l.left) }),
     h("td", { class: "num" + quiet(l.queued), title: l.queued ? l.queued + " ta dars jadvalda, hali o'tilmagan" : null, text: l.queued ? hrs(l.queued * HOURS_PER_PARA) : "–" }),
     h("td", { class: "w-rate" }, rate(l, sum)),
-    diffCell(sum)];
+    diffCell(l, sum)];
 
   // the estimate reads as plain text; clicking its row turns it into a field. Enter or leaving saves, Esc cancels
   let editPlan = () => {};
@@ -1420,7 +1421,7 @@ async function loadView() {
       groups)),
     h("div", { class: "notes" },
       extra.length ? h("p", {}, h("b", { text: "Mustaqil ta'lim: " + hrs(extra.reduce((n, [, v]) => n + v, 0)) + " soat" }), " (" + extra.map(([n, v]) => n + " " + hrs(v)).join(", ") + "). Jadvalga kirmaydi va hisobga qo'shilmagan.") : null,
-      h("p", { text: "Farq: o'tilgan soat minus shu kungacha kerak bo'lgani, reja × (" + P.day + " / " + P.days + " ish kuni): reja semestrning ish kunlariga (dushanba–shanba, yakshanbasiz) teng bo'lingan deb olinadi; bu ilovaning hisobi, sayt raqami emas. Tugagan va yopilgan guruhlar taqqoslashga kirmaydi. Bajarilishi chizig'ida to'q qism o'tilgani, yo'l-yo'l qism jadvaldagi hali o'tilmagan darslar, tik chiziqcha bugungi kerakli nuqta." }),
+      h("p", { text: "Farq: o'tilgan soat minus shu kungacha kerak bo'lgani, reja × (" + P.day + " / " + P.days + " ish kuni): reja semestrning ish kunlariga (dushanba–shanba, yakshanbasiz) teng bo'lingan deb olinadi; bu ilovaning hisobi, sayt raqami emas. Yopilgan guruhlar taqqoslashga kirmaydi; tugagan guruhlar kiradi, lekin ularning qatorida farq ko'rsatilmaydi. Bajarilishi chizig'ida to'q qism o'tilgani, yo'l-yo'l qism jadvaldagi hali o'tilmagan darslar, tik chiziqcha bugungi kerakli nuqta." }),
       h("p", { text: "1 para = 2 soat. O'tilgan soatlar dars jadvalidan hisoblanadi, sayt bu raqamni bermaydi. Davomatsiz: dars vaqti o'tgan, lekin saytda davomat saqlanmagan. Jadvalda: dars jadvalda bor (jadvaldagi och rangli kartalar), lekin hali o'tilmagan, soatda. Yopilgan guruhlarda reja o'tilgan soatga teng olingan. " + COURSE.group + " saytdagi yuklamada yo'q: rejasi taxminiy, o'tilgani shu ilovadagi tugatilgan darslardan." })));
 }
 

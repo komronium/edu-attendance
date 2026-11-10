@@ -39,11 +39,9 @@ test("closed groups neither help nor hurt the comparison", () => {
   assert.equal(mixed.expected, 60); assert.equal(mixed.diff, -10); assert.equal(mixed.held, 50);   // the closed 10 are both expected and held
 });
 
-test("a finished group is neutral too", () => {
-  const done = Pace.summary([{ plan: 16, done: 16, noAtt: 0, finished: true }], 0.5);
-  assert.equal(done.diff, null); assert.equal(done.expected, null); assert.equal(done.pct, 100);
+test("a finished group counts with the hours it taught ahead", () => {
   const mixed = Pace.summary([{ plan: 16, done: 16, noAtt: 0, finished: true }, { plan: 16, done: 4, noAtt: 0 }], 0.5);
-  assert.equal(mixed.expected, 24); assert.equal(mixed.diff, -4);
+  assert.equal(mixed.expected, 16); assert.equal(mixed.diff, 4);
 });
 
 test("before the semester starts nothing is expected", () => {
