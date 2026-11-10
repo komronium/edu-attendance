@@ -683,11 +683,11 @@ function courseCard(e, color) {
   const t = today(), s = e.session, over = paraOver(e, t, nowTime());
   const lines = (status) => cardLines(COURSE.subject, COURSE.type, COURSE.group, COURSE.room, status);
   if (s) return h("a", { class: "slot " + color + (s.finished_at ? " taken" : ""), href: "#/dars/" + s.id },
-    lines(s.finished_at ? state(s.came + "/" + s.total, "check") : over ? state("Tugatilmagan", null, "warn") : state("Olinmoqda", null, "active")));
+    lines(s.finished_at ? state(s.came + "/" + s.total, "check", "ok") : over ? state("Tugatilmagan", null, "bad") : state("Olinmoqda", null, "active")));
   const label = shortDate(e.date) + ", " + e.para + "-para";
   if (e.date > t) return h("button", { type: "button", class: "slot " + color, "aria-label": COURSE.subject + ", " + label + ": dars rejasi", onclick: () => openPlan(e, route) }, lines(planState(planOf(e))));
   return h("button", { type: "button", class: "slot " + color, "aria-label": COURSE.subject + ", " + label + ": davomatni boshlash", onclick: () => startCourse(e) },
-    lines(over ? state("Olinmagan", null, "warn") : state("Davomatni boshlash", null, "active")));
+    lines(over ? state("Olinmagan", null, "bad") : state("Davomatni boshlash", null, "active")));
 }
 // how far through the para the clock is, drawn across today's cell
 function nowLine(p, now) {
@@ -703,7 +703,7 @@ function siteCard(l, unsaved, color, e) {
   const taken = unsaved && past && !unsaved.has(l.date + "|" + Number(l.para));
   const coming = e && !paraOver(e, t, nowTime());
   // without status data a past lesson simply shows no status line
-  const status = coming ? planState(planOf(e)) : taken ? state("Olingan", "check") : unsaved && past ? state("Olinmagan", null, "warn") : null;
+  const status = coming ? planState(planOf(e)) : taken ? state("Olingan", "check", "ok") : unsaved && past ? state("Olinmagan", null, "bad") : null;
   const lines = cardLines(l.subject, fmtType(l.type), l.group, fmtRoom(l.room), status);
   const cls = "slot " + color + (taken ? " taken" : "");
   if (coming) return h("button", { type: "button", class: cls, "aria-label": l.subject + ", " + shortDate(l.date) + ", " + l.para + "-para: dars rejasi", onclick: () => openPlan(e, route) }, lines);
@@ -1133,10 +1133,19 @@ async function scheduleView() {
   };
   const range = shortDate(monday) + " – " + shortDate(shownDays[shownDays.length - 1]);
   const count = entries.length;
+  const isMissing = (e) => paraOver(e, t, now) && (e.kind === "course" ? !(e.session && e.session.finished_at) : !!(unsaved && unsaved.has(e.date + "|" + e.para)));
+  const held = entries.filter((e) => paraOver(e, t, now)).length, missingNow = entries.filter(isMissing).length;
+  const semester = await api("GET", "/api/semester"), weekNo = Math.ceil(Pace.dayNumber(semester.start, semester.days, monday) / 7);
+  const summary = h("p", { class: "week-sum" },
+    h("span", {}, h("b", { text: String(count) }), " ta dars"), h("span", {}, h("b", { text: String(count * HOURS_PER_PARA) }), " soat"),
+    h("span", {}, h("b", { text: String(held) }), " ta o'tildi"),
+    missingNow ? h("span", { class: "neg" }, h("b", { text: String(missingNow) }), " ta davomatsiz") : null);
+  const dayTotal = (d) => { const n = entries.filter((e) => e.date === d).length; return h("td", { class: d === t ? "today" : null, text: n ? n + " dars · " + n * HOURS_PER_PARA + " soat" : "–" }); };
   const table = h("div", { class: "card flush" }, h("table", { class: "timetable" },
     h("caption", { class: "sr-only", text: "Haftalik dars jadvali" }),
     h("thead", {}, h("tr", {}, h("th", { scope: "col", class: "para-col", text: "Para" }),
       shownDays.map((d) => h("th", { scope: "col", class: d === t ? "today" : d < t ? "past" : null }, h("span", { text: capital(weekday(d)) }), h("small", { text: d === t ? "Bugun, " + shortDate(d) : shortDate(d) }))))),
+    h("tfoot", {}, h("tr", {}, h("th", { scope: "row", class: "para-col", text: "Jami" }), shownDays.map(dayTotal))),
     h("tbody", {}, rows.map((p) => h("tr", { class: entries.some((e) => e.para === p) ? null : "quiet" },
       h("th", { scope: "row", class: "para-col" }, h("span", { text: p + "-para" }), PARA_TIMES[p] ? h("small", { text: PARA_TIMES[p].join("–") }) : null),
       shownDays.map((d) => h("td", { class: (d === t ? "today" : "") + (d === t && nowPara(p) ? " now" : "") },
@@ -1146,7 +1155,7 @@ async function scheduleView() {
   const noSite = !entries.some((e) => e.kind === "site");
   const inWeek = [...new Set(entries.map((e) => e.kind === "site" ? e.lesson.subject : COURSE.subject))].sort((a, b) => colorOf(a).localeCompare(colorOf(b)));   // the same order every week
   const legend = h("div", { class: "legend" }, inWeek.map((n) => h("button", { type: "button", class: "key " + colorOf(n), title: "Rang va qisqa nomni o'zgartirish", onclick: () => editSubject(n, scheduleView) }, h("i"), n)),
-    h("span", { class: "muted hint", text: "To'liq rang: davomat olingan. Kelgusi darsni bosing: reja va tayyorlik." }));
+    h("span", { class: "muted hint", text: "To'q rang: davomat olingan. Kelgusi darsni bosing: reja va tayyorlik." }));
   // this semester's gaps are what needs attention; older ones stay available below them
   const start = (data && data.load && data.load.start) || "";
   const live = (unsavedList || []).filter((l) => lessonOver(l) && !cancelled.has(cancelKey(l.date, l.para, l.subject)));
@@ -1171,7 +1180,7 @@ async function scheduleView() {
     h("ul", { class: "plain" }, weekCancelled.map((c) => h("li", {}, h("span", { text: shortDate(c.date) + ", " + c.para + "-para · " + c.subject }),
       h("button", { type: "button", class: "quiet", text: "Qaytarish", onclick: async () => { if (await act(() => api("PUT", "/api/cancelled", { date: c.date, para: c.para, subject: c.subject, cancelled: false }))) scheduleView(); } }))))) : null;
 
-  show(pageHead("Dars jadvali", range + " · " + count + " ta dars",
+  show(pageHead("Dars jadvali", [range + (weekNo > 0 && weekNo <= Math.ceil(semester.days / 7) ? " · " + weekNo + "-hafta" : ""), summary],
       h("button", { type: "button", "aria-label": "Oldingi hafta", onclick: move(-1, "Oldingi hafta") }, icon("back")),
       h("button", { type: "button", text: "Bu hafta", disabled: jw.offset === 0, onclick: move(0, "Keyingi hafta") }),
       h("button", { type: "button", "aria-label": "Keyingi hafta", onclick: move(1, "Keyingi hafta") }, icon("forward"))),

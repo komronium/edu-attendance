@@ -236,9 +236,9 @@ a.person { display: inline-block; min-width: 11rem; }
 .timetable thead th.today small { color: var(--bad); font-weight: 600; }
 .timetable .para-col { width: 112px; border-left: 0; }
 .timetable tbody th { padding: var(--s3); background: none; color: var(--text); vertical-align: top; border-top: 1px solid var(--line); }
-.timetable td { padding: var(--s1); height: 104px; vertical-align: top; border-left: 1px solid var(--line); }   /* every row is as tall as one card */
-.timetable .slot { height: 80px; padding-block: 7px; align-content: start; grid-template-rows: auto auto 1fr; }
-.timetable .slot-wrap { height: 80px; }
+.timetable td { padding: 6px; height: 100px; vertical-align: top; border-left: 1px solid var(--line); }   /* every row is as tall as one card */
+.timetable .slot { height: 86px; padding-block: 8px; align-content: start; grid-template-rows: auto auto 1fr; }
+.timetable .slot-wrap { height: 86px; }
 .timetable .slot b { font-size: var(--t-md); }
 .slot .name-short { display: none; }
 .timetable .slot b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }   /* one line: the short name */
@@ -246,14 +246,24 @@ a.person { display: inline-block; min-width: 11rem; }
 .timetable .slot .name-short { display: inline; }
 .timetable td.today { position: relative; }
 .timetable tr.quiet th { color: var(--muted); }
+.timetable tr.quiet td, .timetable tr.quiet th { height: 40px; padding-block: 8px; }
+.timetable tr.quiet th small { display: none; }
+.timetable td.today { background: color-mix(in srgb, var(--accent) 3%, transparent); }
+.timetable tfoot th, .timetable tfoot td { height: auto; padding: 10px var(--s3); border-top: 1px solid var(--line); color: var(--muted); font-size: var(--t-xs); font-weight: 500; }
+.timetable tfoot td.today { color: var(--accent); font-weight: 600; }
+.week-sum { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s4); margin-top: var(--s1); }
+.week-sum span { color: var(--muted); }
+.week-sum b { color: var(--text); font-weight: 600; }
+.week-sum .neg, .week-sum .neg b { color: var(--bad); }
+.page-head .sub:has(.week-sum) { display: flex; flex-wrap: wrap; gap: var(--s4); }
 .timetable tr.quiet th span { font-weight: 500; }
 .now-line { position: absolute; z-index: 2; left: 0; right: 0; top: calc(var(--p, 0) * 1%); height: 2px; background: var(--bad); pointer-events: none; }
 .now-line::before { content: ""; position: absolute; left: -3px; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--bad); }
 .c1 { --c: var(--c1); } .c2 { --c: var(--c2); } .c3 { --c: var(--c3); } .c4 { --c: var(--c4); }
 .c5 { --c: var(--c5); } .c6 { --c: var(--c6); } .c7 { --c: var(--c7); } .c8 { --c: var(--c8); }
-.slot { display: grid; gap: 1px; justify-content: stretch; justify-items: start; align-content: start; width: 100%; min-height: 0; padding: 7px 10px; border: 0; border-radius: var(--r-md); background: color-mix(in srgb, var(--c) 13%, var(--surface)); color: var(--text); font-size: var(--t-sm); font-weight: 400; line-height: 1.35; text-align: left; white-space: normal; overflow-wrap: break-word; transition: background-color .15s var(--ease-out), transform .16s var(--ease-out); }
-.slot.taken { background: color-mix(in srgb, var(--c) 28%, var(--surface)); }
-.slot.up { box-shadow: 0 0 0 2px var(--text); }
+.slot { display: grid; gap: 1px; justify-content: stretch; justify-items: start; align-content: start; width: 100%; min-height: 0; padding: 7px 10px 7px 12px; border: 0; border-radius: var(--r-sm); background: color-mix(in srgb, var(--c) 10%, var(--surface)); box-shadow: inset 3px 0 0 var(--c); color: var(--text); font-size: var(--t-sm); font-weight: 400; line-height: 1.35; text-align: left; white-space: normal; overflow-wrap: break-word; transition: background-color .15s var(--ease-out), transform .16s var(--ease-out); }
+.slot.taken { background: color-mix(in srgb, var(--c) 22%, var(--surface)); }
+.slot.up { box-shadow: inset 3px 0 0 var(--c), 0 0 0 2px var(--text); }
 a.slot:active { transform: scale(.98); }
 .slot-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); width: 100%; margin-top: auto; }
 .slot-foot small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -272,20 +282,21 @@ a.slot:active { transform: scale(.98); }
 .slot.taken b { color: var(--text); }
 .slot small { color: color-mix(in srgb, var(--c) 12%, var(--text) 82%); font-size: var(--t-sm); }
 .slot.taken small { color: var(--text); }
-a.slot:hover, button.slot:hover { background: color-mix(in srgb, var(--c) 20%, var(--surface)); text-decoration: none; }
-a.slot.taken:hover { background: color-mix(in srgb, var(--c) 36%, var(--surface)); }
+a.slot:hover, button.slot:hover { background: color-mix(in srgb, var(--c) 17%, var(--surface)); text-decoration: none; }
+a.slot.taken:hover { background: color-mix(in srgb, var(--c) 30%, var(--surface)); }
 .state-line { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); font-size: var(--t-xs); font-weight: 600; }
 .state-line .short { display: none; }
 .timetable .state-line .full { display: none; }
 .timetable .state-line .short { display: inline; }
 /* a status inside a lesson card is a small pill on the card, so it reads at a glance */
-.slot .state-line { padding: 1px 8px; border-radius: var(--r-full); background: color-mix(in srgb, var(--surface) 72%, transparent); line-height: 1.55; }
-.slot .state-line.active { background: var(--surface); }
-.slot.taken .state-line { color: var(--text); }
+.slot .state-line { line-height: 1.55; }
+
 .state-line .icon { width: 13px; height: 13px; stroke-width: 3; }
 .state-line.active { color: var(--accent); }
 .state-line.warn { color: var(--warn); }
 .state-line.ok { color: var(--ok); }
+.state-line.bad { color: var(--bad); }
+.slot:has(.state-line.bad) { box-shadow: inset 3px 0 0 var(--c), inset 0 0 0 1px color-mix(in srgb, var(--bad) 55%, transparent); }
 .chip.warn { background: var(--warn-soft); color: var(--warn); }
 .warn-text { color: var(--warn); }
 .legend { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s4); margin-top: -8px; font-size: var(--t-sm); }
