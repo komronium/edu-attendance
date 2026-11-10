@@ -647,7 +647,7 @@ func (s *Server) routes() {
 		if err != nil {
 			return 0, nil, err
 		}
-		return 200, okBody, db.SetSemester(b["start"], b["days"])
+		return 200, okBody, db.SetSemester(b["start"], b["weeks"])
 	})
 
 	// data synced from digital.oxu.uz

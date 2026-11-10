@@ -3,12 +3,19 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const Pace = require("../web/pace.js");
 
-test("day number counts the start date as day 1 and stays inside the semester", () => {
-  assert.equal(Pace.dayNumber("2026-09-14", 90, "2026-09-14"), 1);
-  assert.equal(Pace.dayNumber("2026-09-14", 90, "2026-11-10"), 58);
-  assert.equal(Pace.dayNumber("2026-09-14", 90, "2026-09-01"), 0);
-  assert.equal(Pace.dayNumber("2026-09-14", 90, "2027-01-01"), 90);
-  assert.equal(Pace.fraction("2026-09-14", 90, "2026-10-28"), 0.5);
+test("the semester counts working days, Monday to Saturday", () => {
+  // 15 weeks from Monday 14 September: 90 working days, the last one Saturday 26 December
+  const first = Pace.semester("2026-09-14", 15, "2026-09-14");
+  assert.equal(first.day, 1); assert.equal(first.total, 90); assert.equal(first.left, 89); assert.equal(first.week, 1); assert.equal(first.end, "2026-12-26");
+  const now = Pace.semester("2026-09-14", 15, "2026-11-10");   // Tuesday of week 9: 8 weeks × 6 + 2
+  assert.equal(now.day, 50); assert.equal(now.week, 9); assert.equal(now.left, 40);
+  assert.equal(Pace.semester("2026-09-14", 15, "2026-09-20").day, 6);   // a Sunday adds nothing
+  assert.equal(Pace.semester("2026-09-14", 15, "2026-09-21").day, 7);
+  const before = Pace.semester("2026-09-14", 15, "2026-09-01");
+  assert.equal(before.day, 0); assert.equal(before.week, 0); assert.equal(before.frac, 0);
+  const after = Pace.semester("2026-09-14", 15, "2027-01-15");
+  assert.equal(after.day, 90); assert.equal(after.left, 0); assert.equal(after.week, 15); assert.equal(after.frac, 1);
+  assert.equal(Pace.semester("2026-09-14", 15, "2026-11-10").frac, 50 / 90);
 });
 
 test("summary compares what was held with what the day asks for", () => {
@@ -43,11 +50,11 @@ test("groups lines by lesson type in first-seen order", () => {
   assert.equal(m.get("Amaliy").length, 2);
 });
 
-test("weekly pace: so far, needed, and where it ends", () => {
-  const w = Pace.weekly(210, 130, 59, 90);
-  assert.equal(Pace.fmt1(w.current), "24,9");
-  assert.equal(Pace.fmt1(w.required), "29,4");
-  assert.equal(Math.round(w.projected), 320);
+test("weekly pace counts six working days a week", () => {
+  const w = Pace.weekly(210, 130, 50, 90);
+  assert.equal(Pace.fmt1(w.current), "25,2");    // 210 / 50 × 6
+  assert.equal(Pace.fmt1(w.required), "19,5");   // 130 / 40 × 6
+  assert.equal(Math.round(w.projected), 378);    // 210 + 210 / 50 × 40
   assert.equal(Pace.weekly(10, 5, 90, 90).required, null);
   const early = Pace.weekly(0, 100, 0, 90);
   assert.equal(early.current, null); assert.equal(early.projected, null);

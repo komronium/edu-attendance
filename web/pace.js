@@ -5,11 +5,22 @@
   const DAY = 864e5;
   const utc = (iso) => { const [y, m, d] = iso.split("-").map(Number); return Date.UTC(y, m - 1, d); };
 
-  // the start date is day 1; before it 0, after the last day the last day
-  function dayNumber(start, days, today) {
-    return Math.max(0, Math.min(days, Math.round((utc(today) - utc(start)) / DAY) + 1));
+  const WORK_DAYS = 6;   // Monday to Saturday; Sunday is off
+  const isSunday = (iso) => new Date(utc(iso)).getUTCDay() === 0;
+  const shift = (iso, n) => new Date(utc(iso) + n * DAY).toISOString().slice(0, 10);
+
+  // where today is in a semester of `weeks` weeks: working days so far (today included unless it is
+  // a Sunday), of how many, the calendar week, and the last working day
+  function semester(start, weeks, today) {
+    const total = weeks * WORK_DAYS, span = weeks * 7;
+    const passed = Math.max(0, Math.min(span, Math.round((utc(today) - utc(start)) / DAY) + 1));   // calendar days, today included
+    let day = Math.floor(passed / 7) * WORK_DAYS;
+    for (let i = Math.floor(passed / 7) * 7; i < passed; i++) if (!isSunday(shift(start, i))) day++;
+    day = Math.min(total, day);
+    let end = shift(start, span - 1);
+    while (isSunday(end)) end = shift(end, -1);
+    return { day, total, left: total - day, frac: total ? day / total : 0, week: passed ? Math.ceil(passed / 7) : 0, weeks, end };
   }
-  function fraction(start, days, today) { return days > 0 ? dayNumber(start, days, today) / days : 0; }
 
   // lines: { plan, done, noAtt, closed }. A closed group will not be taught again and its plan is what
   // it got: it is expected in full and held in full, so it neither helps nor hurts the comparison.
@@ -36,13 +47,13 @@
     return out;
   }
 
-  // hours per week so far, hours per week the rest needs, and the total this pace ends on
-  function weekly(held, left, day, days) {
-    const current = day > 0 ? held / day * 7 : null, rest = days - day;
+  // hours per six-day week so far, per week the rest needs, and the total this pace ends on
+  function weekly(held, left, day, total) {
+    const rest = total - day, perDay = day > 0 ? held / day : null;
     return {
-      current,
-      required: rest > 0 ? left / rest * 7 : null,
-      projected: current === null ? null : held + current / 7 * rest,
+      current: perDay === null ? null : perDay * WORK_DAYS,
+      required: rest > 0 ? left / rest * WORK_DAYS : null,
+      projected: perDay === null ? null : held + perDay * rest,
     };
   }
 
@@ -52,6 +63,6 @@
     return (r === 0 ? 0 : r).toFixed(1).replace(".", ",");
   }
 
-  const Pace = { dayNumber, fraction, summary, byType, weekly, fmt1 };
+  const Pace = { semester, summary, byType, weekly, fmt1, WORK_DAYS };
   if (typeof module !== "undefined" && module.exports) module.exports = Pace; else root.Pace = Pace;
 })(typeof self !== "undefined" ? self : this);

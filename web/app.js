@@ -1135,7 +1135,7 @@ async function scheduleView() {
   const count = entries.length;
   const isMissing = (e) => paraOver(e, t, now) && (e.kind === "course" ? !(e.session && e.session.finished_at) : !!(unsaved && unsaved.has(e.date + "|" + e.para)));
   const held = entries.filter((e) => paraOver(e, t, now)).length, missingNow = entries.filter(isMissing).length;
-  const semester = await api("GET", "/api/semester"), weekNo = Math.ceil(Pace.dayNumber(semester.start, semester.days, monday) / 7);
+  const semester = await api("GET", "/api/semester"), weekNo = Pace.semester(semester.start, semester.weeks, monday).week;
   const summary = h("p", { class: "week-sum" },
     h("span", {}, h("b", { text: String(count) }), " ta dars"), h("span", {}, h("b", { text: String(count * HOURS_PER_PARA) }), " soat"),
     h("span", {}, h("b", { text: String(held) }), " ta o'tildi"),
@@ -1180,7 +1180,7 @@ async function scheduleView() {
     h("ul", { class: "plain" }, weekCancelled.map((c) => h("li", {}, h("span", { text: shortDate(c.date) + ", " + c.para + "-para · " + c.subject }),
       h("button", { type: "button", class: "quiet", text: "Qaytarish", onclick: async () => { if (await act(() => api("PUT", "/api/cancelled", { date: c.date, para: c.para, subject: c.subject, cancelled: false }))) scheduleView(); } }))))) : null;
 
-  show(pageHead("Dars jadvali", [range + (weekNo > 0 && weekNo <= Math.ceil(semester.days / 7) ? " · " + weekNo + "-hafta" : ""), summary],
+  show(pageHead("Dars jadvali", [range + (weekNo > 0 && monday <= Pace.semester(semester.start, semester.weeks, monday).end ? " · " + weekNo + "-hafta" : ""), summary],
       h("button", { type: "button", "aria-label": "Oldingi hafta", onclick: move(-1, "Oldingi hafta") }, icon("back")),
       h("button", { type: "button", text: "Bu hafta", disabled: jw.offset === 0, onclick: move(0, "Keyingi hafta") }),
       h("button", { type: "button", "aria-label": "Keyingi hafta", onclick: move(1, "Keyingi hafta") }, icon("forward"))),
@@ -1266,12 +1266,12 @@ const needPct = (sum) => (sum.expected === null || !sum.plan ? null : 100 * sum.
 // the teaching load measured against the semester's calendar; the home page shows its summary
 function loadPace(data, sessions, coursePlan, cancelled, semester) {
   const base = computeLoad(data, sessions, coursePlan, cancelled);
-  const day = Pace.dayNumber(semester.start, semester.days, today()), frac = semester.days ? day / semester.days : 0;
+  const S = Pace.semester(semester.start, semester.weeks, today()), day = S.day, frac = S.frac;
   const all = Pace.summary(base.lines, frac);
   const lecturesFirst = (a, b) => /ma.ruza/i.test(b[0]) - /ma.ruza/i.test(a[0]);
   const types = [...Pace.byType(base.lines)].sort(lecturesFirst).map(([type, list]) => ({ type, sum: Pace.summary(list, frac), est: list.some((l) => l.course && l.plan) }));
-  return { ...base, frac, day, days: semester.days, daysLeft: semester.days - day, end: shiftDay(semester.start, semester.days - 1), all, types,
-    weekly: Pace.weekly(all.held, all.left, day, semester.days), est: base.course.plan ? "~" : "" };
+  return { ...base, frac, day, days: S.total, daysLeft: S.left, week: S.week, weeks: S.weeks, end: S.end, all, types,
+    weekly: Pace.weekly(all.held, all.left, day, S.total), est: base.course.plan ? "~" : "" };
 }
 
 async function loadView() {
@@ -1365,9 +1365,9 @@ async function loadView() {
   const W = P.weekly, timeBar = paceBar(100 * frac, null, "time");
   const restCard = h("section", { class: "card type-card" },
     h("h2", { text: "Oxirigacha" }),
-    h("b", { class: "stat-big" }, String(P.daysLeft), h("small", { text: " kun qoldi" })),
+    h("b", { class: "stat-big" }, String(P.daysLeft), h("small", { text: " ish kuni qoldi" })),
     timeBar,
-    kv("Semestr", shortDate(semester.start) + " – " + shortDate(P.end)),
+    kv("Semestr", shortDate(semester.start) + " – " + shortDate(P.end) + ", " + P.weeks + " hafta"),
     kv("Kerakli sur'at", W.required === null ? "–" : "haftasiga " + est + h1(W.required) + " soat"),
     kv("Hozirgi sur'at", W.current === null ? "–" : "haftasiga " + h1(W.current) + " soat"));
 
@@ -1391,7 +1391,7 @@ async function loadView() {
 
   const extra = Object.entries(independent);
   show(pageHead("Yuklama", [load.semester, load.position].filter(Boolean).join(" · ")),
-    h("p", { class: "sem-line" }, h("b", { text: P.day + "-kun" }), " / " + P.days + " · " + shortDate(semester.start) + " – " + shortDate(P.end) + " · ", h("a", { href: "#/kabinet", text: "o'zgartirish" })),
+    h("p", { class: "sem-line" }, h("b", { text: P.day + "-ish kuni" }), " / " + P.days + " · " + (P.week ? P.week + "-hafta / " + P.weeks + " · " : "") + shortDate(semester.start) + " – " + shortDate(P.end) + " · ", h("a", { href: "#/kabinet", text: "o'zgartirish" })),
     !load.start ? h("p", { class: "sub" }, "To'liq hisob uchun ", h("a", { href: "#/kabinet", text: "Kabinetda qayta sinxronlang" }), ": o'tilgan soatlar butun semestr jadvalidan olinadi.") : null,
     hero,
     h("div", { class: "type-cards" }, P.types.map(typeCard), restCard),
@@ -1405,7 +1405,7 @@ async function loadView() {
       groups)),
     h("div", { class: "notes" },
       extra.length ? h("p", {}, h("b", { text: "Mustaqil ta'lim: " + hrs(extra.reduce((n, [, v]) => n + v, 0)) + " soat" }), " (" + extra.map(([n, v]) => n + " " + hrs(v)).join(", ") + "). Jadvalga kirmaydi va hisobga qo'shilmagan.") : null,
-      h("p", { text: "Kerak edi = reja × (" + P.day + " / " + P.days + " kun): reja semestr kunlariga teng bo'lingan deb olinadi; bu ilovaning hisobi, sayt raqami emas. Yopilgan guruhlar taqqoslashga kirmaydi. Bajarilishi ustunidagi chiziqcha bugungi kerakli nuqtani ko'rsatadi." }),
+      h("p", { text: "Kerak edi = reja × (" + P.day + " / " + P.days + " ish kuni): reja semestrning ish kunlariga (dushanba–shanba, yakshanbasiz) teng bo'lingan deb olinadi; bu ilovaning hisobi, sayt raqami emas. Yopilgan guruhlar taqqoslashga kirmaydi. Bajarilishi ustunidagi chiziqcha bugungi kerakli nuqtani ko'rsatadi." }),
       h("p", { text: "1 para = 2 soat. O'tilgan soatlar dars jadvalidan hisoblanadi, sayt bu raqamni bermaydi. Davomatsiz: dars vaqti o'tgan, lekin saytda davomat saqlanmagan. Jadvalda: dars jadvalda bor (jadvaldagi och rangli kartalar), lekin hali o'tilmagan; dars soni, soat emas. Yopilgan guruhlarda reja o'tilgan soatga teng olingan. " + COURSE.group + " saytdagi yuklamada yo'q: rejasi taxminiy, o'tilgani shu ilovadagi tugatilgan darslardan." })));
 }
 
@@ -1526,18 +1526,23 @@ async function cabinetView() {
 async function semesterForm() {
   const sem = await api("GET", "/api/semester");
   const start = dateField("start", sem.start);
-  const days = h("input", { name: "days", type: "text", inputmode: "numeric", value: String(sem.days), autocomplete: "off", required: true });
-  const end = () => { const iso = start.input.value, n = Number(days.value); return iso && n >= 1 ? "Oxirgi kun: " + longDay(shiftDay(iso, n - 1)) : ""; };
+  const weeks = h("input", { name: "weeks", type: "text", inputmode: "numeric", value: String(sem.weeks), autocomplete: "off", required: true });
+  const end = () => {
+    const iso = start.input.value, n = Number(weeks.value);
+    if (!iso || !(n >= 1 && n <= 60)) return "";
+    const S = Pace.semester(iso, n, iso);
+    return n * Pace.WORK_DAYS + " ish kuni (yakshanbalar hisobga olinmaydi) · oxirgi kun: " + longDay(S.end);
+  };
   const endLine = h("p", { class: "sub", text: end() });
   start.input.addEventListener("change", () => { endLine.textContent = end(); });
-  days.addEventListener("input", () => { endLine.textContent = end(); });
+  weeks.addEventListener("input", () => { endLine.textContent = end(); });
   return h("section", { class: "card" }, h("h2", { text: "Semestr" }),
-    h("p", { class: "sub", text: "Yuklamadagi \"shu kungacha qancha o'tilishi kerak edi\" hisobi shu kunlarga qarab olinadi." }),
+    h("p", { class: "sub", text: "Yuklamadagi \"shu kungacha qancha o'tilishi kerak edi\" hisobi shu ish kunlariga qarab olinadi: haftada 6 kun, dushanbadan shanbagacha." }),
     h("form", { class: "semester-form", onsubmit: async (e) => {
         e.preventDefault();
-        if (await act(() => api("PUT", "/api/semester", { start: start.input.value, days: days.value.trim() }))) say("Saqlandi", true);
+        if (await act(() => api("PUT", "/api/semester", { start: start.input.value, weeks: weeks.value.trim() }))) say("Saqlandi", true);
       } },
-      field("Boshlanishi", start), field("Davomiyligi, kun", days),
+      field("Boshlanishi", start), field("Haftalar soni", weeks),
       h("button", { type: "submit", class: "primary", text: "Saqlash" })),
     endLine);
 }
@@ -2083,9 +2088,10 @@ async function homeView() {
   const monthDays = []; for (let d = t.slice(0, 8) + "01"; d <= t; d = shiftDay(d, 1)) monthDays.push(d);
   const monthHours = entriesFor(monthDays, ctx).filter((e) => paraOver(e, t, now)).length * HOURS_PER_PARA;
   const monthName = capital(MONTHS[Number(t.slice(5, 7)) - 1]);
-  const semMark = h("div", { class: "sem-mark" }, h("p", {}, h("b", { text: (P ? P.day : Pace.dayNumber(semester.start, semester.days, t)) + "-kun" }), " / " + semester.days + " · " + Math.max(1, Math.ceil(Pace.dayNumber(semester.start, semester.days, t) / 7)) + "-hafta · " + (semester.days - Pace.dayNumber(semester.start, semester.days, t)) + " kun qoldi"),
-    paceBar(100 * Pace.fraction(semester.start, semester.days, t), null, "time"));
-
+  const S = Pace.semester(semester.start, semester.weeks, t);
+  const semMark = h("div", { class: "sem-mark" }, h("p", {}, h("b", { text: S.week ? S.week + "-hafta" : "Semestr boshlanmagan" }),
+      S.week ? " / " + S.weeks + " · " + S.day + "-ish kuni / " + S.total + " · " + S.left + " kun qoldi" : ""),
+    paceBar(100 * S.frac, null, "time"));
   show(pageHead("Bugun", capital(longDay(t)), semMark),
     h("div", { class: "lead" },
       todayCard,

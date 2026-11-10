@@ -555,17 +555,18 @@ func (s *Store) SetCoursePlanHours(hours any) error {
 	return err
 }
 
-// Semester is when the teaching semester starts and how many calendar days it lasts; the teaching
-// load's pace ("how much should be done by today") is measured against it.
+// Semester is when the teaching semester starts and how many weeks it lasts. A week has six
+// working days (Sunday is off), so the owner's 15 weeks are 90 working days; the teaching load's
+// pace ("how much should be done by today") is measured against them.
 type Semester struct {
 	Start string `json:"start"`
-	Days  int    `json:"days"`
+	Weeks int    `json:"weeks"`
 }
 
-// Semester returns the saved semester, or the owner's default: 14 September 2026, 90 days.
+// Semester returns the saved semester, or the owner's default: 14 September 2026, 15 weeks.
 func (s *Store) Semester() (Semester, error) {
-	out := Semester{Start: "2026-09-14", Days: 90}
-	rows, err := s.db.Query("select key, value from settings where key in ('semester_start', 'semester_days')")
+	out := Semester{Start: "2026-09-14", Weeks: 15}
+	rows, err := s.db.Query("select key, value from settings where key in ('semester_start', 'semester_weeks')")
 	if err != nil {
 		return out, err
 	}
@@ -578,20 +579,20 @@ func (s *Store) Semester() (Semester, error) {
 		if k == "semester_start" {
 			out.Start = v
 		} else if n, err := strconv.Atoi(v); err == nil {
-			out.Days = n
+			out.Weeks = n
 		}
 	}
 	return out, rows.Err()
 }
 
-// SetSemester saves the semester's first day (YYYY-MM-DD) and its length in days.
-func (s *Store) SetSemester(start any, days any) error {
+// SetSemester saves the semester's first day (YYYY-MM-DD) and its length in weeks.
+func (s *Store) SetSemester(start any, weeks any) error {
 	date, err := cleanDate(start)
 	if err != nil {
 		return err
 	}
 	n := -1
-	switch t := days.(type) {
+	switch t := weeks.(type) {
 	case float64:
 		if t == float64(int(t)) {
 			n = int(t)
@@ -601,11 +602,14 @@ func (s *Store) SetSemester(start any, days any) error {
 			n = v
 		}
 	}
-	if n < 30 || n > 200 {
-		return invalid("kunlar 30 va 200 orasida bo'lsin")
+	if n < 4 || n > 30 {
+		return invalid("haftalar 4 va 30 orasida bo'lsin")
 	}
 	return s.tx(func(tx *sql.Tx) error {
-		for k, v := range map[string]string{"semester_start": date, "semester_days": strconv.Itoa(n)} {
+		if _, err := tx.Exec("delete from settings where key = 'semester_days'"); err != nil {
+			return err
+		}
+		for k, v := range map[string]string{"semester_start": date, "semester_weeks": strconv.Itoa(n)} {
 			if _, err := tx.Exec("insert into settings (key, value) values (?, ?) on conflict (key) do update set value = excluded.value", k, v); err != nil {
 				return err
 			}

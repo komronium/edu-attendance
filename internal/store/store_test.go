@@ -487,18 +487,18 @@ func TestSeed(t *testing.T) {
 
 func TestSemester(t *testing.T) {
 	s := open(t)
-	if v := must(s.Semester()); v != (Semester{Start: "2026-09-14", Days: 90}) {
+	if v := must(s.Semester()); v != (Semester{Start: "2026-09-14", Weeks: 15}) {
 		t.Fatalf("default: %+v", v)
 	}
-	check(s.SetSemester("2027-02-08", 100.0))
-	if v := must(s.Semester()); v != (Semester{Start: "2027-02-08", Days: 100}) {
+	check(s.SetSemester("2027-02-08", 16.0))
+	if v := must(s.Semester()); v != (Semester{Start: "2027-02-08", Weeks: 16}) {
 		t.Fatalf("%+v", v)
 	}
-	check(s.SetSemester("2027-02-08", "95"))
-	if v := must(s.Semester()); v.Days != 95 {
+	check(s.SetSemester("2027-02-08", "14"))
+	if v := must(s.Semester()); v.Weeks != 14 {
 		t.Fatalf("%+v", v)
 	}
-	wantInvalid(t, s.SetSemester("14.09.2026", 90.0), "sana noto'g'ri")
-	wantInvalid(t, s.SetSemester("2026-09-14", 5.0), "kunlar 30 va 200 orasida bo'lsin")
-	wantInvalid(t, s.SetSemester("2026-09-14", "abc"), "kunlar 30 va 200 orasida bo'lsin")
+	wantInvalid(t, s.SetSemester("14.09.2026", 15.0), "sana noto'g'ri")
+	wantInvalid(t, s.SetSemester("2026-09-14", 2.0), "haftalar 4 va 30 orasida bo'lsin")
+	wantInvalid(t, s.SetSemester("2026-09-14", "abc"), "haftalar 4 va 30 orasida bo'lsin")
 }

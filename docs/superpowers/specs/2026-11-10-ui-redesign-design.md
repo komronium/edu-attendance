@@ -17,8 +17,8 @@ The owner finds the home page unpleasant and short on useful information, the ti
 ## Calls made by the builder (not the owner's words)
 
 - Timetable keeps the grid layout (mockup 2A), not day columns.
-- "90 days" means 90 calendar days; expected hours = plan × (day number ÷ 90), where 14 September is day 1, clamped to 0..1.
-- Semester start and length are editable in Kabinet and stored on the server (default 2026-09-14, 90).
+- Owner's correction (2026-11-10): "90 days" are working days, 15 weeks × 6 (Monday to Saturday, Sundays not counted). The owner enters weeks. Expected hours = plan × (working days so far ÷ weeks × 6), where 14 September is working day 1.
+- Semester start and number of weeks are editable in Kabinet and stored on the server (default 2026-09-14, 15 weeks).
 - Closed groups (plan = hours held) are left out of the pace comparison.
 - Lesson-start reminder is a Chrome notification fired by the open page 15 minutes before a para, like the existing notifications ("sahifa ochiq turganda").
 - Sidebar is regrouped under small labels (Hisobot, Kurs, Tizim); the Kurs collapse toggle goes away, its three pages are always listed.
