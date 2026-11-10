@@ -80,7 +80,7 @@
   function fmt1(v) {
     if (v === null || v === undefined || Number.isNaN(v)) return "–";
     const r = Math.round(v * 10) / 10;
-    return (r === 0 ? 0 : r).toFixed(1).replace(".", ",");
+    return (r === 0 ? 0 : r).toFixed(1);
   }
 
   const Pace = { semester, workDays, windowFraction, summary, byType, weekly, fmt1, WORK_DAYS };

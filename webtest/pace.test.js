@@ -38,10 +38,10 @@ test("a line with its own fraction is expected by it, the rest by the semester",
 test("summary compares what was held with what the day asks for", () => {
   const s = Pace.summary([{ plan: 120, done: 70, noAtt: 4, closed: false }, { plan: 220, done: 136, noAtt: 0, closed: false }], 0.656);
   assert.equal(s.plan, 340); assert.equal(s.held, 210); assert.equal(s.left, 130);
-  assert.equal(Pace.fmt1(s.pct), "61,8");
-  assert.equal(Pace.fmt1(s.expected), "223,0");
-  assert.equal(Pace.fmt1(s.diff), "-13,0");
-  assert.equal(Pace.fmt1(s.ofExpected), "94,2");
+  assert.equal(Pace.fmt1(s.pct), "61.8");
+  assert.equal(Pace.fmt1(s.expected), "223.0");
+  assert.equal(Pace.fmt1(s.diff), "-13.0");
+  assert.equal(Pace.fmt1(s.ofExpected), "94.2");
 });
 
 test("no plan gives no percentage", () => {
@@ -74,17 +74,17 @@ test("groups lines by lesson type in first-seen order", () => {
 
 test("weekly pace counts six working days a week", () => {
   const w = Pace.weekly(210, 130, 50, 90);
-  assert.equal(Pace.fmt1(w.current), "25,2");    // 210 / 50 × 6
-  assert.equal(Pace.fmt1(w.required), "19,5");   // 130 / 40 × 6
+  assert.equal(Pace.fmt1(w.current), "25.2");    // 210 / 50 × 6
+  assert.equal(Pace.fmt1(w.required), "19.5");   // 130 / 40 × 6
   assert.equal(Math.round(w.projected), 378);    // 210 + 210 / 50 × 40
   assert.equal(Pace.weekly(10, 5, 90, 90).required, null);
   const early = Pace.weekly(0, 100, 0, 90);
   assert.equal(early.current, null); assert.equal(early.projected, null);
 });
 
-test("one decimal with a comma", () => {
+test("one decimal with a point", () => {
   assert.equal(Pace.fmt1(null), "–");
-  assert.equal(Pace.fmt1(61.75), "61,8");
-  assert.equal(Pace.fmt1(100), "100,0");
-  assert.equal(Pace.fmt1(-0.04), "0,0");
+  assert.equal(Pace.fmt1(61.75), "61.8");
+  assert.equal(Pace.fmt1(100), "100.0");
+  assert.equal(Pace.fmt1(-0.04), "0.0");
 });

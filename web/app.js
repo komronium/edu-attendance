@@ -1278,8 +1278,8 @@ const total = (list) => ({
   noAtt: list.reduce((n, l) => n + l.noAtt, 0), left: list.reduce((n, l) => n + (l.left || 0), 0), queued: list.reduce((n, l) => n + (l.queued || 0), 0),
 });
 
-// hours and percentages of the pace: one decimal with a comma; whole hours lose the ",0"
-const h1 = (v) => Pace.fmt1(v).replace(/,0$/, "").replace("-", "−");
+// hours and percentages of the pace: one decimal with a point; whole hours lose the ".0"
+const h1 = (v) => Pace.fmt1(v).replace(/\.0$/, "").replace("-", "−");
 const pct1 = (v) => (v === null || v === undefined ? "–" : Pace.fmt1(v) + "%");
 const signed = (v) => (v === null ? "–" : (v > 0 ? "+" : "") + h1(v));
 const PARA_SLACK = 2;   // within one para of the calendar counts as on plan
