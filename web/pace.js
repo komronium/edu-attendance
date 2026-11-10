@@ -12,21 +12,21 @@
   function fraction(start, days, today) { return days > 0 ? dayNumber(start, days, today) / days : 0; }
 
   // lines: { plan, done, noAtt, closed }. A closed group will not be taught again and its plan is what
-  // it got, so it counts in the totals but not in the comparison with the calendar.
+  // it got: it is expected in full and held in full, so it neither helps nor hurts the comparison.
   function summary(lines, frac) {
-    let plan = 0, held = 0, openPlan = 0, openHeld = 0;
+    let plan = 0, held = 0, openPlan = 0, closedPlan = 0;
     for (const l of lines) {
-      const p = l.plan || 0, hd = (l.done || 0) + (l.noAtt || 0);
-      plan += p; held += hd;
-      if (!l.closed) { openPlan += p; openHeld += hd; }
+      const p = l.plan || 0;
+      plan += p; held += (l.done || 0) + (l.noAtt || 0);
+      if (l.closed) closedPlan += p; else openPlan += p;
     }
-    const expected = openPlan > 0 ? openPlan * Math.max(0, Math.min(1, frac)) : null;
+    const expected = openPlan > 0 ? closedPlan + openPlan * Math.max(0, Math.min(1, frac)) : null;
     return {
       plan, held, left: Math.max(0, plan - held),
       pct: plan > 0 ? 100 * held / plan : null,
       expected,
-      diff: expected === null ? null : openHeld - expected,
-      ofExpected: expected ? 100 * openHeld / expected : null,
+      diff: expected === null ? null : held - expected,
+      ofExpected: expected ? 100 * held / expected : null,
     };
   }
 

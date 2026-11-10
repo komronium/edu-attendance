@@ -1232,8 +1232,40 @@ const total = (list) => ({
   noAtt: list.reduce((n, l) => n + l.noAtt, 0), left: list.reduce((n, l) => n + (l.left || 0), 0), queued: list.reduce((n, l) => n + (l.queued || 0), 0),
 });
 
+// hours and percentages of the pace: one decimal with a comma; whole hours lose the ",0"
+const h1 = (v) => Pace.fmt1(v).replace(/,0$/, "").replace("-", "−");
+const pct1 = (v) => (v === null || v === undefined ? "–" : Pace.fmt1(v) + "%");
+const signed = (v) => (v === null ? "–" : (v > 0 ? "+" : "") + h1(v));
+const PARA_SLACK = 2;   // within one para of the calendar counts as on plan
+function verdictText(diff) {
+  if (diff === null || diff === undefined) return "";
+  if (Math.abs(diff) < PARA_SLACK) return "Rejada";
+  return h1(Math.abs(diff)) + " soat " + (diff < 0 ? "orqadasiz" : "oldindasiz");
+}
+const verdictClass = (diff) => (diff === null || diff === undefined || Math.abs(diff) < PARA_SLACK ? "" : diff < 0 ? " neg" : " pos");
+// a track with what was held, and a mark where the calendar says it should be today
+function paceBar(pct, need, cls) {
+  const bar = h("span", { class: "pace-bar" + (cls ? " " + cls : ""), "aria-hidden": "true" }, h("i"), need === null || need === undefined ? null : h("u"));
+  bar.style.setProperty("--v", Math.max(0, Math.min(100, pct || 0)));
+  if (need !== null && need !== undefined) bar.style.setProperty("--need", Math.max(0, Math.min(100, need)));
+  return bar;
+}
+// where today's mark sits on a bar of the whole plan
+const needPct = (sum) => (sum.expected === null || !sum.plan ? null : 100 * sum.expected / sum.plan);
+
+// the teaching load measured against the semester's calendar; the home page shows its summary
+function loadPace(data, sessions, coursePlan, cancelled, semester) {
+  const base = computeLoad(data, sessions, coursePlan, cancelled);
+  const day = Pace.dayNumber(semester.start, semester.days, today()), frac = semester.days ? day / semester.days : 0;
+  const all = Pace.summary(base.lines, frac);
+  const lecturesFirst = (a, b) => /ma.ruza/i.test(b[0]) - /ma.ruza/i.test(a[0]);
+  const types = [...Pace.byType(base.lines)].sort(lecturesFirst).map(([type, list]) => ({ type, sum: Pace.summary(list, frac), est: list.some((l) => l.course && l.plan) }));
+  return { ...base, frac, day, days: semester.days, daysLeft: semester.days - day, end: shiftDay(semester.start, semester.days - 1), all, types,
+    weekly: Pace.weekly(all.held, all.left, day, semester.days), est: base.course.plan ? "~" : "" };
+}
+
 async function loadView() {
-  const [{ data }, { sessions }, { hours: coursePlan }, { items: cancelledList }] = await Promise.all([api("GET", "/api/oxu"), api("GET", "/api/sessions"), api("GET", "/api/course-plan"), api("GET", "/api/cancelled")]);
+  const [{ data }, { sessions }, { hours: coursePlan }, { items: cancelledList }, semester] = await Promise.all([api("GET", "/api/oxu"), api("GET", "/api/sessions"), api("GET", "/api/course-plan"), api("GET", "/api/cancelled"), api("GET", "/api/semester")]);
   const cancelled = new Set(cancelledList.map((c) => cancelKey(c.date, c.para, c.subject)));
   const load = data && data.load;
   if (!load) return show(pageHead("Yuklama"), h("div", { class: "card empty" },
@@ -1241,27 +1273,22 @@ async function loadView() {
     h("p", { text: "Semestr rejasi, o'tilgan va qolgan soatlar har fan bo'yicha shu yerda ko'rinadi. " + COURSE.group + " kursi soatlari sinxronlashsiz ham hisoblanadi." }),
     h("a", { class: "button primary", href: "#/kabinet", text: "Kabinetda sinxronlash" })));
 
-  const { lines, independent, course, coursePlanHours } = computeLoad(data, sessions, coursePlan, cancelled);
-  const site = total(lines.filter((l) => !l.course));
+  const P = loadPace(data, sessions, coursePlan, cancelled, semester);
+  const { lines, independent, course, coursePlanHours, frac, all, est } = P;
+  const site = total(lines.filter((l) => !l.course)), sums = total(lines);
   const colorOf = subjectColors(data);
-  const share = (v, plan) => (plan ? Math.min(100, 100 * v / plan) : 0);
-
-  // taught, then held without attendance, on one track; the numbers are always printed next to it
-  const stack = (l, cls) => {
-    const a = h("i"), b = h("i", { class: "soft" });
-    a.style.setProperty("--v", share(l.done, l.plan));
-    b.style.setProperty("--v", share(l.noAtt, l.plan));
-    return h("span", { class: "bars" + (cls ? " " + cls : ""), "aria-hidden": "true" }, a, b);
-  };
-  const progress = (l) => h("span", { class: "rate" }, stack(l), h("b", { text: l.plan ? pct(100 * (l.done + l.noAtt) / l.plan) : "–" }));
   const quiet = (v) => (v ? "" : " muted");
-  const numbers = (l, planNode) => [
+  const diffCell = (sum) => h("td", { class: "num" + (sum.diff === null ? " muted" : verdictClass(sum.diff)), text: signed(sum.diff) });
+  const rate = (sum) => h("span", { class: "rate" }, paceBar(sum.pct, needPct(sum)), h("b", { text: pct1(sum.pct) }));
+  const numbers = (l, sum, planNode) => [
     h("td", { class: "num" }, planNode ?? hrs(l.plan)),
     h("td", { class: "num" + quiet(l.done), text: hrs(l.done) }),
     h("td", { class: "num" + quiet(l.noAtt), text: l.noAtt ? hrs(l.noAtt) : "–" }),
     h("td", { class: "num" + quiet(l.left), text: hrs(l.left) }),
     h("td", { class: "num" + quiet(l.queued), title: l.queued ? l.queued + " ta dars jadvalda, hali o'tilmagan (" + hrs(l.queued * HOURS_PER_PARA) + " soat)" : null, text: l.queued ? l.queued + " ta" : "–" }),
-    h("td", { class: "w-rate" }, progress(l))];
+    h("td", { class: "w-rate" }, rate(sum)),
+    h("td", { class: "num" + (sum.expected === null ? " muted" : ""), text: sum.expected === null ? "–" : h1(sum.expected) }),
+    diffCell(sum)];
 
   // the estimate reads as plain text; clicking its row turns it into a field. Enter or leaving saves, Esc cancels
   let editPlan = () => {};
@@ -1289,41 +1316,86 @@ async function loadView() {
     h("td", { class: "who" }, l.group, l.closed ? [" ", chip("Yopilgan")] : null, l.course ? [" ", chip("Taxminiy")] : null,
       !l.closed && !l.course && l.left === 0 ? [" ", chip("Tugagan", null, "check")] : null),
     h("td", { class: "nowrap muted", text: l.type }),
-    numbers(l, l.course ? planCell() : l.closed && l.sitePlan !== l.plan ? h("span", { title: "Saytda " + hrs(l.sitePlan) + " soat", text: hrs(l.plan) }) : null));
+    numbers(l, Pace.summary([l], frac), l.course ? planCell() : l.closed && l.sitePlan !== l.plan ? h("span", { title: "Saytda " + hrs(l.sitePlan) + " soat", text: hrs(l.plan) }) : null));
   const groups = [...new Set(lines.map((l) => l.subject))].map((name) => {
-    const mine = lines.filter((l) => l.subject === name), t = total(mine);
+    const mine = lines.filter((l) => l.subject === name);
     return h("tbody", { class: colorOf(name) },
-      h("tr", { class: "subject-row" }, h("th", { scope: "rowgroup", colspan: "2" }, h("span", { class: "dot" }), name), numbers(t)),
+      h("tr", { class: "subject-row" }, h("th", { scope: "rowgroup", colspan: "2" }, h("span", { class: "dot" }), name), numbers(total(mine), Pace.summary(mine, frac))),
       mine.map(line));
   });
 
-  const all = total(lines), est = course.plan ? "~" : "";   // the course plan is an estimate, and so is any sum with it
-  const held = (l) => l.done + l.noAtt;
-  const sum = (label, value, note) => h("div", { class: "load-sum" }, h("span", { class: "label", text: label }), h("b", {}, value, h("small", { text: " soat" })), note ? h("span", { class: "note", text: note }) : null);
-  const part = (label, l, mark, chipNode) => h("tr", {},
-    h("th", { scope: "row" }, label, chipNode ? [" ", chipNode] : null),
-    h("td", { class: "num" }, h("b", { text: hrs(held(l)) })), h("td", { class: "num" }, h("b", { text: mark + hrs(l.left) })), h("td", { class: "num muted", text: mark + hrs(l.plan) }),
-    h("td", { class: "w-rate" }, progress(l)));
-  const hero = h("section", { class: "card hero-load", "aria-label": "Umumiy yuklama" },
-    h("div", { class: "load-sums" },
-      sum("O'tilgan", hrs(held(all)), all.noAtt ? "shundan " + hrs(all.noAtt) + " soat davomatsiz" : "kurs va tizim birga"),
-      sum("Qolgan", est + hrs(all.left), all.queued ? "shundan jadvalda " + all.queued + " ta dars" : est ? "kurs rejasi taxminiy" : "kurs va tizim birga"),
-      sum("Jami reja", est + hrs(all.plan), all.plan ? pct(100 * held(all) / all.plan) + " bajarildi" : null)),
-    stack(all, "tall"),
-    h("table", { class: "load-parts" },
-      h("thead", {}, h("tr", {}, h("th", { scope: "col", class: "sr-only", text: "Bo'lim" }), ["O'tilgan", "Qolgan", "Reja"].map((x) => h("th", { scope: "col", class: "num", text: x })), h("th", { scope: "col", class: "w-rate", text: "Bajarilishi" }))),
-      h("tbody", {}, part("Tizim", site, ""), part("Kurs, " + COURSE.group, course, est, chip("Taxminiy")))));
+  // ---- the lead: how much is done, and how that compares with today
+  const kv = (label, value, cls) => h("div", { class: "kv" }, h("span", { text: label }), h("b", { class: cls || null }, value));
+  const sum = (label, value, note) => h("div", { class: "pace-sum" }, h("span", { class: "label", text: label }), h("b", {}, value, h("small", { text: " soat" })), note ? h("span", { class: "note", text: note }) : null);
+  const need = needPct(all);
+  const hero = h("section", { class: "card pace-hero", "aria-label": "Umumiy yuklama" },
+    h("div", { class: "pace-lead" },
+      h("b", { class: "pace-big" }, Pace.fmt1(all.pct), h("small", { text: "%" })),
+      all.diff === null ? h("p", { class: "muted", text: "Semestr rejasining bajarilgan qismi." }) : [
+        h("p", { class: "verdict" + verdictClass(all.diff), text: verdictText(all.diff) }),
+        h("p", { class: "muted", text: "Shu kungacha " + est + h1(all.expected) + " soat o'tilishi kerak edi, " + h1(all.held) + " soat o'tildi" + (all.ofExpected === null ? "." : ": kerakli miqdorning " + pct1(all.ofExpected) + ".") })]),
+    h("div", { class: "pace-side" },
+      paceBar(all.pct, need, "tall"),
+      h("div", { class: "pace-legend" }, h("span", {}, h("i", { class: "k-done" }), "O'tildi " + pct1(all.pct)),
+        need === null ? null : h("span", {}, h("i", { class: "k-need" }), "Bugun bo'lishi kerak " + est + pct1(need))),
+      h("div", { class: "pace-sums" },
+        sum("O'tildi", h1(all.held), sums.noAtt ? "shundan " + hrs(sums.noAtt) + " soat davomatsiz" : null),
+        sum("Qoldi", est + h1(all.left), sums.queued ? "jadvalda " + sums.queued + " ta dars" : null),
+        sum("Jami reja", est + h1(all.plan), null)),
+      h("p", { class: "pace-split muted" }, "Tizim " + hrs(site.done + site.noAtt) + " / " + hrs(site.plan) + " soat · Kurs, " + COURSE.group + " " + hrs(course.done) + " / " + est + hrs(course.plan) + " soat ", course.plan ? chip("Taxminiy") : null)));
+
+  // ---- by lesson type, and the time that is left
+  const typeCard = ({ type, sum: s, est: e }) => h("section", { class: "card type-card" },
+    h("h2", { text: type || "Boshqa" }),
+    h("b", { class: "stat-big" }, Pace.fmt1(s.pct), h("small", { text: "%" })),
+    paceBar(s.pct, needPct(s)),
+    kv("O'tildi", h1(s.held) + " / " + (e ? "~" : "") + h1(s.plan) + " soat"),
+    kv("Bugungacha kerak edi", s.expected === null ? "–" : (e ? "~" : "") + h1(s.expected) + " soat"),
+    kv("Farq", s.diff === null ? "–" : signed(s.diff) + " soat", verdictClass(s.diff).trim()));
+  const W = P.weekly, timeBar = paceBar(100 * frac, null, "time");
+  const restCard = h("section", { class: "card type-card" },
+    h("h2", { text: "Oxirigacha" }),
+    h("b", { class: "stat-big" }, String(P.daysLeft), h("small", { text: " kun qoldi" })),
+    timeBar,
+    kv("Semestr", shortDate(semester.start) + " – " + shortDate(P.end)),
+    kv("Kerakli sur'at", W.required === null ? "–" : "haftasiga " + est + h1(W.required) + " soat"),
+    kv("Hozirgi sur'at", W.current === null ? "–" : "haftasiga " + h1(W.current) + " soat"));
+
+  // ---- what follows from the numbers
+  const facts = [];
+  if (W.projected !== null && all.plan && P.daysLeft > 0) {
+    const short = all.plan - W.projected;
+    facts.push(short >= PARA_SLACK ? ["bad", "Shu sur'atda semestr oxirida " + est + h1(Math.min(all.plan, W.projected)) + " soat bo'ladi: " + est + h1(short) + " soat yetmaydi."]
+      : ["ok", "Shu sur'atda reja semestr oxirigacha to'liq bajariladi."]);
+  }
+  if (all.left > 0) {
+    const queuedHours = sums.queued * HOURS_PER_PARA, open = all.left - queuedHours;
+    facts.push(open >= PARA_SLACK ? ["", "Jadvalda yana " + sums.queued + " ta dars bor (" + hrs(queuedHours) + " soat). Qolgan " + est + h1(open) + " soat hali jadvalga qo'yilmagan."]
+      : ["", "Jadvaldagi " + sums.queued + " ta dars (" + hrs(queuedHours) + " soat) qolgan rejani yopadi."]);
+  }
+  const worst = lines.filter((l) => !l.closed && l.plan).map((l) => [l, Pace.summary([l], frac).diff]).sort((x, y) => x[1] - y[1])[0];
+  if (worst && worst[1] <= -PARA_SLACK) facts.push(["bad", "Eng ko'p orqada: " + worst[0].subject + ", " + worst[0].group + " (" + worst[0].type + "), " + signed(worst[1]) + " soat."]);
+  if (sums.noAtt) facts.push(["warn", h("span", {}, hrs(sums.noAtt) + " soat davomatsiz: dars o'tilgan, lekin saytda davomat saqlanmagan. ", h("a", { href: "#/jadval", text: "Jadvalda ko'rish" }))]);
+  const factCard = facts.length ? h("section", { class: "card" }, h("h2", { text: "Bashorat" }),
+    h("ul", { class: "plain facts" }, facts.map(([kind, text]) => h("li", { class: kind || null }, h("i", { class: "fact-dot" }), typeof text === "string" ? h("span", { text }) : text)))) : null;
 
   const extra = Object.entries(independent);
   show(pageHead("Yuklama", [load.semester, load.position].filter(Boolean).join(" · ")),
+    h("p", { class: "sem-line" }, h("b", { text: P.day + "-kun" }), " / " + P.days + " · " + shortDate(semester.start) + " – " + shortDate(P.end) + " · ", h("a", { href: "#/kabinet", text: "o'zgartirish" })),
     !load.start ? h("p", { class: "sub" }, "To'liq hisob uchun ", h("a", { href: "#/kabinet", text: "Kabinetda qayta sinxronlang" }), ": o'tilgan soatlar butun semestr jadvalidan olinadi.") : null,
     hero,
+    h("div", { class: "type-cards" }, P.types.map(typeCard), restCard),
+    factCard,
     h("div", { class: "card flush" }, h("table", { class: "load" },
       h("thead", {}, h("tr", {}, h("th", { scope: "col", text: "Fan va guruh" }), h("th", { scope: "col", text: "Turi" }),
-        [["Reja"], ["O'tilgan"], ["Davomatsiz"], ["Qolgan"], ["Jadvalda", "Jadvalda bor, hali o'tilmagan darslar soni"]].map(([x, tip]) => h("th", { scope: "col", class: "num", title: tip || null, text: x })), h("th", { scope: "col", class: "w-rate", text: "Bajarilishi" }))),
+        [["Reja"], ["O'tilgan"], ["Davomatsiz"], ["Qolgan"], ["Jadvalda", "Jadvalda bor, hali o'tilmagan darslar soni"]].map(([x, tip]) => h("th", { scope: "col", class: "num", title: tip || null, text: x })),
+        h("th", { scope: "col", class: "w-rate", text: "Bajarilishi" }),
+        h("th", { scope: "col", class: "num", title: "Reja × o'tgan kunlar ulushi: shu kungacha o'tilishi kerak bo'lgan soat", text: "Kerak edi" }),
+        h("th", { scope: "col", class: "num", title: "O'tilgan soat minus kerak bo'lgan soat", text: "Farq" }))),
       groups)),
     h("div", { class: "notes" },
       extra.length ? h("p", {}, h("b", { text: "Mustaqil ta'lim: " + hrs(extra.reduce((n, [, v]) => n + v, 0)) + " soat" }), " (" + extra.map(([n, v]) => n + " " + hrs(v)).join(", ") + "). Jadvalga kirmaydi va hisobga qo'shilmagan.") : null,
+      h("p", { text: "Kerak edi = reja × (" + P.day + " / " + P.days + " kun): reja semestr kunlariga teng bo'lingan deb olinadi; bu ilovaning hisobi, sayt raqami emas. Yopilgan guruhlar taqqoslashga kirmaydi. Bajarilishi ustunidagi chiziqcha bugungi kerakli nuqtani ko'rsatadi." }),
       h("p", { text: "1 para = 2 soat. O'tilgan soatlar dars jadvalidan hisoblanadi, sayt bu raqamni bermaydi. Davomatsiz: dars vaqti o'tgan, lekin saytda davomat saqlanmagan. Jadvalda: dars jadvalda bor (jadvaldagi och rangli kartalar), lekin hali o'tilmagan; dars soni, soat emas. Yopilgan guruhlarda reja o'tilgan soatga teng olingan. " + COURSE.group + " saytdagi yuklamada yo'q: rejasi taxminiy, o'tilgani shu ilovadagi tugatilgan darslardan." })));
 }
 

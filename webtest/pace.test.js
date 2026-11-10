@@ -25,11 +25,11 @@ test("no plan gives no percentage", () => {
   assert.equal(s.pct, null); assert.equal(s.expected, null); assert.equal(s.diff, null); assert.equal(s.ofExpected, null);
 });
 
-test("closed groups are left out of the comparison", () => {
+test("closed groups neither help nor hurt the comparison", () => {
   const closed = Pace.summary([{ plan: 10, done: 10, noAtt: 0, closed: true }], 0.5);
   assert.equal(closed.expected, null); assert.equal(closed.diff, null); assert.equal(closed.pct, 100);
   const mixed = Pace.summary([{ plan: 10, done: 10, noAtt: 0, closed: true }, { plan: 100, done: 40, noAtt: 0 }], 0.5);
-  assert.equal(mixed.expected, 50); assert.equal(mixed.diff, -10); assert.equal(mixed.held, 50);
+  assert.equal(mixed.expected, 60); assert.equal(mixed.diff, -10); assert.equal(mixed.held, 50);   // the closed 10 are both expected and held
 });
 
 test("before the semester starts nothing is expected", () => {
