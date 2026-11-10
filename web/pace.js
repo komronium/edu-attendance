@@ -22,17 +22,36 @@
     return { day, total, left: total - day, frac: total ? day / total : 0, week: passed ? Math.ceil(passed / 7) : 0, weeks, end };
   }
 
-  // lines: { plan, done, noAtt, closed }. A closed group will not be taught again and its plan is what
+  // working days (Monday to Saturday) from a to b, both included
+  function workDays(a, b) {
+    const n = Math.round((utc(b) - utc(a)) / DAY) + 1;
+    if (n <= 0) return 0;
+    let out = Math.floor(n / 7) * WORK_DAYS;
+    for (let i = Math.floor(n / 7) * 7; i < n; i++) if (!isSunday(shift(a, i))) out++;
+    return out;
+  }
+  // how far through its own study window a group is, by working days: 0 before it, 1 after it
+  function windowFraction(first, last, today) {
+    if (today < first) return 0;
+    if (today >= last) return 1;
+    const all = workDays(first, last);
+    return all ? workDays(first, today) / all : 1;
+  }
+
+  // lines: { plan, done, noAtt, closed, frac }. A line with its own frac (a group studying in a short
+  // session) is measured by it; the rest by the semester's frac. A closed group will not be taught again and its plan is what
   // it got: it is expected in full and held in full, so it neither helps nor hurts the comparison.
   // A finished group counts as any other: the hours it got ahead of the calendar are real.
   function summary(lines, frac) {
-    let plan = 0, held = 0, openPlan = 0, closedPlan = 0;
+    let plan = 0, held = 0, openPlan = 0, closedPlan = 0, openExpected = 0;
+    const clamp = (v) => Math.max(0, Math.min(1, v));
     for (const l of lines) {
       const p = l.plan || 0;
       plan += p; held += (l.done || 0) + (l.noAtt || 0);
-      if (l.closed) closedPlan += p; else openPlan += p;
+      if (l.closed) closedPlan += p;
+      else { openPlan += p; openExpected += p * clamp(l.frac ?? frac); }
     }
-    const expected = openPlan > 0 ? closedPlan + openPlan * Math.max(0, Math.min(1, frac)) : null;
+    const expected = openPlan > 0 ? closedPlan + openExpected : null;
     return {
       plan, held, left: Math.max(0, plan - held),
       pct: plan > 0 ? 100 * held / plan : null,
@@ -64,6 +83,6 @@
     return (r === 0 ? 0 : r).toFixed(1).replace(".", ",");
   }
 
-  const Pace = { semester, summary, byType, weekly, fmt1, WORK_DAYS };
+  const Pace = { semester, workDays, windowFraction, summary, byType, weekly, fmt1, WORK_DAYS };
   if (typeof module !== "undefined" && module.exports) module.exports = Pace; else root.Pace = Pace;
 })(typeof self !== "undefined" ? self : this);

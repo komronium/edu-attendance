@@ -18,6 +18,23 @@ test("the semester counts working days, Monday to Saturday", () => {
   assert.equal(Pace.semester("2026-09-14", 15, "2026-11-10").frac, 50 / 90);
 });
 
+test("a short session is measured on its own working days", () => {
+  // 14 September to 3 October: three six-day weeks
+  assert.equal(Pace.workDays("2026-09-14", "2026-10-03"), 18);
+  assert.equal(Pace.workDays("2026-09-14", "2026-09-20"), 6);   // the Sunday does not count
+  assert.equal(Pace.workDays("2026-09-20", "2026-09-14"), 0);
+  assert.equal(Pace.windowFraction("2026-09-14", "2026-10-03", "2026-09-01"), 0);
+  assert.equal(Pace.windowFraction("2026-09-14", "2026-10-03", "2026-09-19"), 6 / 18);
+  assert.equal(Pace.windowFraction("2026-09-14", "2026-10-03", "2026-11-10"), 1);
+});
+
+test("a line with its own fraction is expected by it, the rest by the semester", () => {
+  const s = Pace.summary([{ plan: 16, done: 4, noAtt: 0, frac: 0.25 }, { plan: 30, done: 16, noAtt: 0 }], 0.5);
+  assert.equal(s.expected, 4 + 15); assert.equal(s.diff, 1);
+  const notYet = Pace.summary([{ plan: 16, done: 0, noAtt: 0, frac: 0 }], 0.5);
+  assert.equal(notYet.expected, 0); assert.equal(notYet.diff, 0);
+});
+
 test("summary compares what was held with what the day asks for", () => {
   const s = Pace.summary([{ plan: 120, done: 70, noAtt: 4, closed: false }, { plan: 220, done: 136, noAtt: 0, closed: false }], 0.656);
   assert.equal(s.plan, 340); assert.equal(s.held, 210); assert.equal(s.left, 130);

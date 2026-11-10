@@ -1204,6 +1204,28 @@ async function scheduleView() {
 const HOURS_PER_PARA = 2;    // checked against the site: 8 lessons = a 16-hour line
 const hrs = (v) => String(Math.round(v * 10) / 10);
 
+// part-time (sirtqi) groups, named S1-KT-22 and so on, study in a session of a few weeks, not the whole semester
+const isSirtqi = (group) => group.split(/,\s*/).every((g) => /^S\d/i.test(g.trim()));
+const SESSION_MIN_DAYS = 21;   // a session is at least three weeks, even while the timetable shows less of it
+// a part-time group's session: the first to the last lesson in the timetable of any line it is in
+// (its lectures are shared with other groups of the same session), at least three weeks long
+function sessionWindows(lines) {
+  const span = new Map();
+  for (const l of lines) {
+    if (!l.sirtqi || !l.last) continue;
+    for (const g of l.group.split(/,\s*/)) {
+      const w = span.get(g) || { first: l.first, last: l.last };
+      span.set(g, { first: l.first < w.first ? l.first : w.first, last: l.last > w.last ? l.last : w.last });
+    }
+  }
+  return (l) => {
+    const ws = l.group.split(/,\s*/).map((g) => span.get(g)).filter(Boolean);
+    if (!ws.length) return null;
+    const first = ws.reduce((m, w) => (w.first < m ? w.first : m), ws[0].first), last = ws.reduce((m, w) => (w.last > m ? w.last : m), ws[0].last);
+    const minEnd = shiftDay(first, SESSION_MIN_DAYS - 1);
+    return { first, last: last > minEnd ? last : minEnd };
+  };
+}
 function computeLoad(data, sessions, coursePlan, cancelled) {
   const load = data.load;
   const t = today(), now = nowTime(), start = load.start || "";
@@ -1225,9 +1247,10 @@ function computeLoad(data, sessions, coursePlan, cancelled) {
     const sitePlan = Number(item.hours), closed = /yopildi/i.test(item.group), plan = closed ? done + noAtt : sitePlan;
     // lessons in the timetable that have not been held yet (the lighter cards)
     const queued = closed ? 0 : mine.filter((l) => !ended(l)).length;
-    const first = mine.reduce((m, l) => (l.date < m ? l.date : m), "9999-12-31");
+    const first = mine.reduce((m, l) => (l.date < m ? l.date : m), "9999-12-31"), last = mine.reduce((m, l) => (l.date > m ? l.date : m), "");
     const left = Math.max(0, plan - done - noAtt);
-    lines.push({ subject, type: fmtType(item.type), group: item.group.replace(/_yopildi.*/i, ""), plan, sitePlan, done, noAtt, closed, queued, left, first, finished: !closed && plan > 0 && left === 0 });
+    const group = item.group.replace(/_yopildi.*/i, "");
+    lines.push({ subject, type: fmtType(item.type), group, plan, sitePlan, done, noAtt, closed, queued, left, first, last, sirtqi: isSirtqi(group), finished: !closed && plan > 0 && left === 0 });
   }
   // the group taught in this app is not in the site's load: finished lessons here, planned hours entered by hand
   const courseDone = sessions.filter((s) => s.finished_at && s.date >= start).length * HOURS_PER_PARA;
@@ -1283,6 +1306,11 @@ const needPct = (sum) => (sum.expected === null || !sum.plan ? null : 100 * sum.
 function loadPace(data, sessions, coursePlan, cancelled, semester) {
   const base = computeLoad(data, sessions, coursePlan, cancelled);
   const S = Pace.semester(semester.start, semester.weeks, today()), day = S.day, frac = S.frac;
+  const sessionWindow = sessionWindows(base.lines);
+  for (const l of base.lines) {   // a part-time group is measured on its own session
+    const w = sessionWindow(l);
+    if (l.sirtqi) { l.window = w; l.frac = w ? Pace.windowFraction(w.first, w.last, today()) : 0; }
+  }
   const all = Pace.summary(base.lines, frac);
   const lecturesFirst = (a, b) => /ma.ruza/i.test(b[0]) - /ma.ruza/i.test(a[0]);
   const types = [...Pace.byType(base.lines)].sort(lecturesFirst).map(([type, list]) => ({ type, sum: Pace.summary(list, frac), est: list.some((l) => l.course && l.plan) }));
@@ -1340,6 +1368,7 @@ async function loadView() {
   };
   const line = (l) => h("tr", { class: "line" + (l.closed ? " off" : "") + (l.course ? " tap" : ""), onclick: l.course ? (e) => { if (!e.target.closest("input, button")) editPlan(); } : null },
     h("td", { class: "who" }, l.group, l.closed ? [" ", chip("Yopilgan")] : null, l.course ? [" ", chip("Taxminiy")] : null,
+      l.sirtqi && !l.closed && !l.finished ? [" ", h("span", { class: "chip", title: l.window ? "O'qish davri: " + shortDate(l.window.first) + " – " + shortDate(l.window.last) + ". Farq shu davr ish kunlari bo'yicha." : "Hali dars bo'lmagan: farq 0 dan hisoblanadi.", text: "Sirtqi" + (l.window ? " · " + shortDate(l.window.first) + " – " + shortDate(l.window.last) : "") })] : null,
       !l.closed && !l.course && l.left === 0 ? [" ", chip("Tugagan", null, "check")] : null),
     h("td", { class: "nowrap muted", text: l.type }),
     numbers(l, Pace.summary([l], frac), l.course ? planCell() : l.closed && l.sitePlan !== l.plan ? h("span", { title: "Saytda " + hrs(l.sitePlan) + " soat", text: hrs(l.plan) }) : null));
@@ -1421,7 +1450,7 @@ async function loadView() {
       groups)),
     h("div", { class: "notes" },
       extra.length ? h("p", {}, h("b", { text: "Mustaqil ta'lim: " + hrs(extra.reduce((n, [, v]) => n + v, 0)) + " soat" }), " (" + extra.map(([n, v]) => n + " " + hrs(v)).join(", ") + "). Jadvalga kirmaydi va hisobga qo'shilmagan.") : null,
-      h("p", { text: "Farq: o'tilgan soat minus shu kungacha kerak bo'lgani, reja × (" + P.day + " / " + P.days + " ish kuni): reja semestrning ish kunlariga (dushanba–shanba, yakshanbasiz) teng bo'lingan deb olinadi; bu ilovaning hisobi, sayt raqami emas. Yopilgan guruhlar taqqoslashga kirmaydi; tugagan guruhlar kiradi, lekin ularning qatorida farq ko'rsatilmaydi. Bajarilishi chizig'ida to'q qism o'tilgani, yo'l-yo'l qism jadvaldagi hali o'tilmagan darslar, tik chiziqcha bugungi kerakli nuqta." }),
+      h("p", { text: "Farq: o'tilgan soat minus shu kungacha kerak bo'lgani, reja × (" + P.day + " / " + P.days + " ish kuni): reja semestrning ish kunlariga (dushanba–shanba, yakshanbasiz) teng bo'lingan deb olinadi; bu ilovaning hisobi, sayt raqami emas. Kunduzgi guruhlar butun semestr bo'yicha, sirtqi guruhlar (S1-KT-22 kabi) o'z o'qish davri bo'yicha o'lchanadi: birinchi darsidan jadvaldagi oxirgi darsigacha, kamida 3 hafta, ish kunlarida. Yopilgan guruhlar taqqoslashga kirmaydi; tugagan guruhlar kiradi, lekin ularning qatorida farq ko'rsatilmaydi. Bajarilishi chizig'ida to'q qism o'tilgani, yo'l-yo'l qism jadvaldagi hali o'tilmagan darslar, tik chiziqcha bugungi kerakli nuqta." }),
       h("p", { text: "1 para = 2 soat. O'tilgan soatlar dars jadvalidan hisoblanadi, sayt bu raqamni bermaydi. Davomatsiz: dars vaqti o'tgan, lekin saytda davomat saqlanmagan. Jadvalda: dars jadvalda bor (jadvaldagi och rangli kartalar), lekin hali o'tilmagan, soatda. Yopilgan guruhlarda reja o'tilgan soatga teng olingan. " + COURSE.group + " saytdagi yuklamada yo'q: rejasi taxminiy, o'tilgani shu ilovadagi tugatilgan darslardan." })));
 }
 
