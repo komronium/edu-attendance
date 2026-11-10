@@ -22,14 +22,15 @@
     return { day, total, left: total - day, frac: total ? day / total : 0, week: passed ? Math.ceil(passed / 7) : 0, weeks, end };
   }
 
-  // lines: { plan, done, noAtt, closed }. A closed group will not be taught again and its plan is what
-  // it got: it is expected in full and held in full, so it neither helps nor hurts the comparison.
+  // lines: { plan, done, noAtt, closed, finished }. A closed group will not be taught again and its plan
+  // is what it got; a finished one has taught its whole plan. Either is expected in full and held in
+  // full, so it neither helps nor hurts the comparison.
   function summary(lines, frac) {
     let plan = 0, held = 0, openPlan = 0, closedPlan = 0;
     for (const l of lines) {
       const p = l.plan || 0;
       plan += p; held += (l.done || 0) + (l.noAtt || 0);
-      if (l.closed) closedPlan += p; else openPlan += p;
+      if (l.closed || l.finished) closedPlan += p; else openPlan += p;
     }
     const expected = openPlan > 0 ? closedPlan + openPlan * Math.max(0, Math.min(1, frac)) : null;
     return {

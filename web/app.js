@@ -415,7 +415,7 @@ async function lessonView(id) {
     h("section", { class: "card stack plan-card", "aria-labelledby": "plan-h" },
       h("div", { class: "plan-card-head" }, h("h2", { id: "plan-h", text: "Dars rejasi" }), plan && plan.outcome ? chip(OUTCOMES[plan.outcome], plan.outcome === "done" ? "ok" : "warn") : planChip(plan)),
       plan && plan.items.length ? h("ul", { class: "plain plan-list" }, plan.items.map((x) => h("li", { class: x.done ? "done" : null }, icon(x.done ? "check" : "dot"), h("span", { text: x.text })))) : null,
-      h("button", { type: "button", class: "wide", text: !plan ? "Reja tuzish" : paraOver(entry, today(), nowTime()) && !plan.outcome ? "Natijani belgilash" : "Rejani ochish", onclick: () => openPlan(entry, () => lessonView(id)) })),
+      h("button", { type: "button", class: "wide", text: !plan ? "Reja tuzish" : "Rejani ochish", onclick: () => openPlan(entry, () => lessonView(id)) })),
     h("details", { class: "card fold" }, h("summary", { text: "Dars sozlamalari" }),
       h("form", { class: "stack", onsubmit: async (e) => {
           e.preventDefault();
@@ -882,17 +882,20 @@ function planChip(p) {
   return chip(STAGES[st], st === "ready" ? "ok" : st === "planned" ? "live" : null, st === "ready" ? "check" : null);
 }
 
-// topics of a class marked as taught: plans that ended "o'tildi", and the course group's finished lessons
+// topics of a class taught: a planned lesson whose para is over counts as taught unless its plan says
+// it was only partly done or moved; and the course group's finished lessons
+const planHeld = (p) => paraOver({ date: p.date, para: Number(p.para) }, today(), nowTime());
+const planTaught = (p) => p.outcome === "done" || (!p.outcome && planHeld(p));
 function coveredTopics(info, sessions) {
   const out = new Set();
-  for (const p of planCache.plans.values()) if (p.outcome === "done" && p.topic && sameClass(p, info)) out.add(normTitle(p.topic));
+  for (const p of planCache.plans.values()) if (planTaught(p) && p.topic && sameClass(p, info)) out.add(normTitle(p.topic));
   if (info.subject === COURSE.subject && info.group === COURSE.group) for (const s of sessions || []) if (s.finished_at && s.topic) out.add(normTitle(s.topic));
   return out;
 }
 // the first topic of the semester list that is neither taught nor already planned for this class
 function suggestTopic(info, sessions) {
   const done = coveredTopics(info, sessions || planCache.sessions);
-  const planned = new Set([...planCache.plans.values()].filter((p) => sameClass(p, info) && p.topic && !p.outcome).map((p) => normTitle(p.topic)));
+  const planned = new Set([...planCache.plans.values()].filter((p) => sameClass(p, info) && p.topic && !planHeld(p)).map((p) => normTitle(p.topic)));
   return (planCache.topics[info.subject] || []).find((t) => !done.has(normTitle(t)) && !planned.has(normTitle(t))) || "";
 }
 
@@ -994,7 +997,7 @@ function openPlan(e, after, sessions) {
   (p.topic ? itemIn : topic).focus();
 }
 
-// the plans page: the coming week, what still needs an outcome, and each class against its topic list
+// the plans page: the current lesson day, the rest of the week folded, and each class against its topic list
 const PLAN_DAYS = 7;
 async function plansView() {
   const [{ sessions }, { data }, { items: cancelledList }] = await Promise.all([api("GET", "/api/sessions"), api("GET", "/api/oxu"), api("GET", "/api/cancelled"), loadPlans()]);
@@ -1005,9 +1008,10 @@ async function plansView() {
   const redraw = () => plansView();
   const byTime = (a, b) => a.date.localeCompare(b.date) || a.para - b.para;
   const coming = entriesFor([...Array(PLAN_DAYS).keys()].map((i) => shiftDay(t, i)), ctx).filter((e) => !paraOver(e, t, now)).sort(byTime);
-  const recent = entriesFor([...Array(14).keys()].map((i) => shiftDay(t, i - 13)), ctx)
-    .filter((e) => paraOver(e, t, now) && planStage(planOf(e)) !== "none" && !planOf(e).outcome).sort((a, b) => byTime(b, a));
-  const ready = coming.filter((e) => planStage(planOf(e)) === "ready").length;
+  // today while it still has lessons, else the next day that has them; a lesson that is over leaves
+  const lead = coming.length ? coming[0].date : null;
+  const current = coming.filter((e) => e.date === lead), later = coming.filter((e) => e.date !== lead);
+  const ready = current.filter((e) => planStage(planOf(e)) === "ready").length;
 
   const dayTitle = (d) => (relDay(d) ? capital(relDay(d)) + ", " : d === shiftDay(t, 1) ? "Ertaga, " : "") + longDay(d);
 
@@ -1049,7 +1053,6 @@ async function plansView() {
       h("tr", { class: "group" + (d === t ? " today" : "") }, h("th", { colspan: "4", scope: "colgroup" }, h("span", { text: dayTitle(d) }), h("small", { text: list.filter((x) => x.date === d).length + " ta dars" }))),
       list.filter((x) => x.date === d).sort((a, b) => a.para - b.para).map((x) => x.row)))));
   };
-  const outcomeBtn = (e) => h("button", { type: "button", class: "quiet", text: "Natijani belgilash", onclick: () => openPlan(e, redraw, sessions) });
 
   // every class taught this semester, with how far its topic list has got
   const days = [];
@@ -1087,10 +1090,12 @@ async function plansView() {
       h("td", { class: "right" }, h("button", { type: "button", class: "quiet", text: list.length ? "Mavzular" : "Kiritish", onclick: () => editTopics(info) })));
   });
 
-  show(pageHead("Dars rejasi", "Keyingi " + PLAN_DAYS + " kun · " + coming.length + " ta dars" + (!coming.length ? "" : ready ? ", " + ready + " tasiga tayyor" : ", hali birortasiga tayyor emas")),
-    recent.length ? h("section", { "aria-labelledby": "res-h", class: "stack" }, h("h2", { id: "res-h", class: "section-title", text: "Natijasi belgilanmagan" }), table(recent.map((e) => ({ date: e.date, para: e.para, row: row(e, outcomeBtn(e)) })))) : null,
-    h("section", { "aria-labelledby": "next-h", class: "stack" }, h("h2", { id: "next-h", class: "section-title", text: "Kelgusi darslar" }),
-      coming.length ? table(coming.map((e) => ({ date: e.date, para: e.para, row: row(e) }))) : h("p", { class: "card empty", text: "Keyingi " + PLAN_DAYS + " kunda dars yo'q." })),
+  const asRows = (list) => list.map((e) => ({ date: e.date, para: e.para, row: row(e) }));
+  const leadTitle = !lead ? "Kelgusi darslar" : lead === t ? "Bugungi darslar" : lead === shiftDay(t, 1) ? "Ertangi darslar" : capital(weekday(lead)) + "dagi darslar";
+  show(pageHead("Dars rejasi", !current.length ? "Keyingi " + PLAN_DAYS + " kunda dars yo'q" : capital(dayTitle(lead)) + " · " + current.length + " ta dars" + (ready === current.length ? ", hammasiga tayyor" : ready ? ", " + ready + " tasiga tayyor" : ", hali tayyor emas")),
+    h("section", { "aria-labelledby": "next-h", class: "stack" }, h("h2", { id: "next-h", class: "section-title", text: leadTitle }),
+      current.length ? table(asRows(current)) : h("p", { class: "card empty", text: "Keyingi " + PLAN_DAYS + " kunda dars yo'q." })),
+    later.length ? h("details", { class: "fold-line later-days" }, h("summary", { text: "Keyingi kunlar: " + later.length + " ta dars" }), table(asRows(later))) : null,
     h("section", { "aria-labelledby": "course-h", class: "stack" }, h("h2", { id: "course-h", class: "section-title", text: "Kurs rejasi" }),
       h("p", { class: "sub", text: "O'tilgan mavzular semestr ro'yxatiga qarab. «Orqada» taxminiy: bir dars kuni bir mavzu deb hisoblanadi." }),
       courseRows.length ? h("div", { class: "card flush" }, h("table", {}, h("tbody", {}, courseRows))) : h("p", { class: "card empty", text: "Bu semestrda dars topilmadi." })));
@@ -1220,12 +1225,15 @@ function computeLoad(data, sessions, coursePlan, cancelled) {
     const sitePlan = Number(item.hours), closed = /yopildi/i.test(item.group), plan = closed ? done + noAtt : sitePlan;
     // lessons in the timetable that have not been held yet (the lighter cards)
     const queued = closed ? 0 : mine.filter((l) => !ended(l)).length;
-    lines.push({ subject, type: fmtType(item.type), group: item.group.replace(/_yopildi.*/i, ""), plan, sitePlan, done, noAtt, closed, queued, left: Math.max(0, plan - done - noAtt) });
+    const first = mine.reduce((m, l) => (l.date < m ? l.date : m), "9999-12-31");
+    const left = Math.max(0, plan - done - noAtt);
+    lines.push({ subject, type: fmtType(item.type), group: item.group.replace(/_yopildi.*/i, ""), plan, sitePlan, done, noAtt, closed, queued, left, first, finished: !closed && plan > 0 && left === 0 });
   }
   // the group taught in this app is not in the site's load: finished lessons here, planned hours entered by hand
   const courseDone = sessions.filter((s) => s.finished_at && s.date >= start).length * HOURS_PER_PARA;
   const coursePlanHours = coursePlan ?? COURSE.planHours;
-  const course = { subject: COURSE.subject, type: COURSE.type, group: COURSE.group, plan: coursePlanHours, done: courseDone, noAtt: 0, course: true, left: Math.max(0, coursePlanHours - courseDone) };
+  const courseFirst = sessions.map((x) => x.date).filter((d) => d >= start).sort()[0] || "9999-12-31";
+  const course = { subject: COURSE.subject, type: COURSE.type, group: COURSE.group, plan: coursePlanHours, done: courseDone, noAtt: 0, course: true, left: Math.max(0, coursePlanHours - courseDone), first: courseFirst };
   // its timetable is generated week after week: count as far as the site's schedule reaches (at least two weeks), never past the hours left
   const ctx = lessonContext(sessions, data, cancelled);
   const lastSite = (data.lessons || []).reduce((m, l) => (l.date > m ? l.date : m), shiftDay(t, 13));
@@ -1234,6 +1242,11 @@ function computeLoad(data, sessions, coursePlan, cancelled) {
   course.queued = Math.min(Math.ceil(course.left / HOURS_PER_PARA),
     entriesFor(ahead, ctx).filter((e) => e.kind === "course" && !paraOver(e, t, now) && !(e.session && e.session.finished_at)).length);
   lines.unshift(course);
+  // within a subject: by the month its group started, lectures before practicals, then by the first lesson
+  const lectureFirst = (l) => (/ma.ruza/i.test(l.type) ? 0 : 1);
+  const order = [...new Set(lines.map((l) => l.subject))];
+  lines.sort((a, b) => order.indexOf(a.subject) - order.indexOf(b.subject) || a.first.slice(0, 7).localeCompare(b.first.slice(0, 7))
+    || lectureFirst(a) - lectureFirst(b) || a.first.localeCompare(b.first) || a.group.localeCompare(b.group));
 
   return { lines, independent, course, coursePlanHours };
 }
@@ -1254,9 +1267,12 @@ function verdictText(diff) {
 }
 const verdictClass = (diff) => (diff === null || diff === undefined || Math.abs(diff) < PARA_SLACK ? "" : diff < 0 ? " neg" : " pos");
 // a track with what was held, and a mark where the calendar says it should be today
-function paceBar(pct, need, cls) {
-  const bar = h("span", { class: "pace-bar" + (cls ? " " + cls : ""), "aria-hidden": "true" }, h("i"), need === null || need === undefined ? null : h("u"));
-  bar.style.setProperty("--v", Math.max(0, Math.min(100, pct || 0)));
+// soon: the part already in the timetable but not held yet, drawn striped after it
+function paceBar(pct, need, cls, soon) {
+  const v = Math.max(0, Math.min(100, pct || 0)), q = Math.max(0, Math.min(100 - v, soon || 0));
+  const bar = h("span", { class: "pace-bar" + (cls ? " " + cls : ""), "aria-hidden": "true" }, h("i"), q ? h("s") : null, need === null || need === undefined ? null : h("u"));
+  bar.style.setProperty("--v", v);
+  if (q) bar.style.setProperty("--q", q);
   if (need !== null && need !== undefined) bar.style.setProperty("--need", Math.max(0, Math.min(100, need)));
   return bar;
 }
@@ -1288,16 +1304,15 @@ async function loadView() {
   const site = total(lines.filter((l) => !l.course)), sums = total(lines);
   const colorOf = subjectColors(data);
   const quiet = (v) => (v ? "" : " muted");
-  const diffCell = (sum) => h("td", { class: "num" + (sum.diff === null ? " muted" : verdictClass(sum.diff)), text: signed(sum.diff) });
-  const rate = (sum) => h("span", { class: "rate" }, paceBar(sum.pct, needPct(sum)), h("b", { text: pct1(sum.pct) }));
+  const diffCell = (sum) => h("td", { class: "num" + verdictClass(sum.diff), text: sum.diff === null ? "" : signed(sum.diff) });
+  const rate = (l, sum) => h("span", { class: "rate" }, paceBar(sum.pct, needPct(sum), null, sum.plan ? 100 * (l.queued || 0) * HOURS_PER_PARA / sum.plan : 0), h("b", { text: pct1(sum.pct) }));
   const numbers = (l, sum, planNode) => [
     h("td", { class: "num" }, planNode ?? hrs(l.plan)),
     h("td", { class: "num" + quiet(l.done), text: hrs(l.done) }),
     h("td", { class: "num" + quiet(l.noAtt), text: l.noAtt ? hrs(l.noAtt) : "–" }),
     h("td", { class: "num" + quiet(l.left), text: hrs(l.left) }),
-    h("td", { class: "num" + quiet(l.queued), title: l.queued ? l.queued + " ta dars jadvalda, hali o'tilmagan (" + hrs(l.queued * HOURS_PER_PARA) + " soat)" : null, text: l.queued ? l.queued + " ta" : "–" }),
-    h("td", { class: "w-rate" }, rate(sum)),
-    h("td", { class: "num" + (sum.expected === null ? " muted" : ""), text: sum.expected === null ? "–" : h1(sum.expected) }),
+    h("td", { class: "num" + quiet(l.queued), title: l.queued ? l.queued + " ta dars jadvalda, hali o'tilmagan" : null, text: l.queued ? hrs(l.queued * HOURS_PER_PARA) : "–" }),
+    h("td", { class: "w-rate" }, rate(l, sum)),
     diffCell(sum)];
 
   // the estimate reads as plain text; clicking its row turns it into a field. Enter or leaving saves, Esc cancels
@@ -1345,12 +1360,13 @@ async function loadView() {
         h("p", { class: "verdict" + verdictClass(all.diff), text: verdictText(all.diff) }),
         h("p", { class: "muted", text: "Shu kungacha " + est + h1(all.expected) + " soat o'tilishi kerak edi, " + h1(all.held) + " soat o'tildi" + (all.ofExpected === null ? "." : ": kerakli miqdorning " + pct1(all.ofExpected) + ".") })]),
     h("div", { class: "pace-side" },
-      paceBar(all.pct, need, "tall"),
+      paceBar(all.pct, need, "tall", all.plan ? 100 * sums.queued * HOURS_PER_PARA / all.plan : 0),
       h("div", { class: "pace-legend" }, h("span", {}, h("i", { class: "k-done" }), "O'tildi " + pct1(all.pct)),
+        sums.queued ? h("span", {}, h("i", { class: "k-soon" }), "Jadvalda " + hrs(sums.queued * HOURS_PER_PARA) + " soat") : null,
         need === null ? null : h("span", {}, h("i", { class: "k-need" }), "Bugun bo'lishi kerak " + est + pct1(need))),
       h("div", { class: "pace-sums" },
         sum("O'tildi", h1(all.held), sums.noAtt ? "shundan " + hrs(sums.noAtt) + " soat davomatsiz" : null),
-        sum("Qoldi", est + h1(all.left), sums.queued ? "jadvalda " + sums.queued + " ta dars" : null),
+        sum("Qoldi", est + h1(all.left), sums.queued ? "shundan jadvalda " + hrs(sums.queued * HOURS_PER_PARA) + " soat" : null),
         sum("Jami reja", est + h1(all.plan), null)),
       h("p", { class: "pace-split muted" }, "Tizim " + hrs(site.done + site.noAtt) + " / " + hrs(site.plan) + " soat · Kurs, " + COURSE.group + " " + hrs(course.done) + " / " + est + hrs(course.plan) + " soat ", course.plan ? chip("Taxminiy") : null)));
 
@@ -1398,15 +1414,14 @@ async function loadView() {
     factCard,
     h("div", { class: "card flush" }, h("table", { class: "load" },
       h("thead", {}, h("tr", {}, h("th", { scope: "col", text: "Fan va guruh" }), h("th", { scope: "col", text: "Turi" }),
-        [["Reja"], ["O'tilgan"], ["Davomatsiz"], ["Qolgan"], ["Jadvalda", "Jadvalda bor, hali o'tilmagan darslar soni"]].map(([x, tip]) => h("th", { scope: "col", class: "num", title: tip || null, text: x })),
+        [["Reja"], ["O'tilgan"], ["Davomatsiz"], ["Qolgan"], ["Jadvalda", "Jadvalda bor, hali o'tilmagan darslar, soatda"]].map(([x, tip]) => h("th", { scope: "col", class: "num", title: tip || null, text: x })),
         h("th", { scope: "col", class: "w-rate", text: "Bajarilishi" }),
-        h("th", { scope: "col", class: "num", title: "Reja × o'tgan kunlar ulushi: shu kungacha o'tilishi kerak bo'lgan soat", text: "Kerak edi" }),
-        h("th", { scope: "col", class: "num", title: "O'tilgan soat minus kerak bo'lgan soat", text: "Farq" }))),
+        h("th", { scope: "col", class: "num", title: "O'tilgan soat minus shu kungacha o'tilishi kerak bo'lgan soat. Tugagan va yopilgan guruhlarda ko'rsatilmaydi.", text: "Farq" }))),
       groups)),
     h("div", { class: "notes" },
       extra.length ? h("p", {}, h("b", { text: "Mustaqil ta'lim: " + hrs(extra.reduce((n, [, v]) => n + v, 0)) + " soat" }), " (" + extra.map(([n, v]) => n + " " + hrs(v)).join(", ") + "). Jadvalga kirmaydi va hisobga qo'shilmagan.") : null,
-      h("p", { text: "Kerak edi = reja × (" + P.day + " / " + P.days + " ish kuni): reja semestrning ish kunlariga (dushanba–shanba, yakshanbasiz) teng bo'lingan deb olinadi; bu ilovaning hisobi, sayt raqami emas. Yopilgan guruhlar taqqoslashga kirmaydi. Bajarilishi ustunidagi chiziqcha bugungi kerakli nuqtani ko'rsatadi." }),
-      h("p", { text: "1 para = 2 soat. O'tilgan soatlar dars jadvalidan hisoblanadi, sayt bu raqamni bermaydi. Davomatsiz: dars vaqti o'tgan, lekin saytda davomat saqlanmagan. Jadvalda: dars jadvalda bor (jadvaldagi och rangli kartalar), lekin hali o'tilmagan; dars soni, soat emas. Yopilgan guruhlarda reja o'tilgan soatga teng olingan. " + COURSE.group + " saytdagi yuklamada yo'q: rejasi taxminiy, o'tilgani shu ilovadagi tugatilgan darslardan." })));
+      h("p", { text: "Farq: o'tilgan soat minus shu kungacha kerak bo'lgani, reja × (" + P.day + " / " + P.days + " ish kuni): reja semestrning ish kunlariga (dushanba–shanba, yakshanbasiz) teng bo'lingan deb olinadi; bu ilovaning hisobi, sayt raqami emas. Tugagan va yopilgan guruhlar taqqoslashga kirmaydi. Bajarilishi chizig'ida to'q qism o'tilgani, yo'l-yo'l qism jadvaldagi hali o'tilmagan darslar, tik chiziqcha bugungi kerakli nuqta." }),
+      h("p", { text: "1 para = 2 soat. O'tilgan soatlar dars jadvalidan hisoblanadi, sayt bu raqamni bermaydi. Davomatsiz: dars vaqti o'tgan, lekin saytda davomat saqlanmagan. Jadvalda: dars jadvalda bor (jadvaldagi och rangli kartalar), lekin hali o'tilmagan, soatda. Yopilgan guruhlarda reja o'tilgan soatga teng olingan. " + COURSE.group + " saytdagi yuklamada yo'q: rejasi taxminiy, o'tilgani shu ilovadagi tugatilgan darslardan." })));
 }
 
 /* ------------------------------------------------------------ cabinet (digital.oxu.uz) */
@@ -1976,11 +1991,10 @@ async function homeView() {
   const start = (data && data.load && data.load.start) || "";
   const gaps = (ctx.unsavedList || []).filter((l) => l.date >= start && lessonOver(l) && !cancelled.has(cancelKey(l.date, l.para, l.subject))).length;
   const gapList = courseGaps(ctx, t, now), todo = gapList.length;
-  // preparation: today's lessons still to come and tomorrow's, and lessons over whose outcome is not marked
+  // preparation: today's lessons still to come and tomorrow's
   const unplanned = entriesFor([t, tomorrow], ctx).filter((e) => !paraOver(e, t, now) && planStage(planOf(e)) === "none").sort((a, b) => a.date.localeCompare(b.date) || a.para - b.para);
   const todayUnplanned = unplanned.filter((e) => e.date === t), tomorrowUnplanned = unplanned.filter((e) => e.date === tomorrow);
   const notReady = entries.filter((e) => !paraOver(e, t, now) && planStage(planOf(e)) === "planned").length;
-  const noOutcome = entriesFor([...Array(14).keys()].map((i) => shiftDay(t, i - 13)), ctx).filter((e) => paraOver(e, t, now) && planStage(planOf(e)) !== "none" && !planOf(e).outcome).length;
   const paras = (list) => list.map((e) => e.para).join(", ") + "-para";
   const ready = works.filter((w) => { const n = (customSteps[w.band] ?? workSteps(w.band)).length; return n && w.step >= n; }).length;
   const syncText = { expired: "Sessiya tugadi, yangi cookie kerak", wrong_account: "Saytda boshqa hisob ochiq", none: "Avtomatik sinxronlash o'chiq", error: "Sinxronlash xato berdi, Kabinetni tekshiring" }[status.state];
@@ -1997,7 +2011,6 @@ async function homeView() {
     bonus.count && bonus.days <= 7 ? ["#/ustama", "alert", "Ustama: " + bonus.count + " ta band ochiq, oy tugashiga " + bonus.days + " kun"] : null,
     notReady ? ["#/reja", "clock", "Bugun " + notReady + " ta darsga hali tayyor emassiz"] : null,
     tomorrowUnplanned.length ? ["#/reja", "clock", "Ertangi " + paras(tomorrowUnplanned) + ": reja yo'q"] : null,
-    noOutcome ? ["#/reja", "clock", noOutcome + " ta darsning natijasi belgilanmagan"] : null,
     behind ? ["#/yuklama", "clock", "Yuklama rejadan " + P.est + h1(behind) + " soat orqada"] : null,
     bonus.count && bonus.days > 7 ? ["#/ustama", "clock", "Ustama: " + bonus.count + " ta band ochiq, oy tugashiga " + bonus.days + " kun"] : null,
     debts.owed ? ["#/qarzlar", "clock", debts.owed + " ta qarz topshirilmagan"] : null,
