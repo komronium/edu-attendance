@@ -9,6 +9,7 @@ linux:
 test:
 	go vet ./...
 	go test ./...
+	node --test webtest/
 
 demo: build
 	./bin/attendance demo --no-login

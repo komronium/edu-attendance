@@ -555,6 +555,65 @@ func (s *Store) SetCoursePlanHours(hours any) error {
 	return err
 }
 
+// Semester is when the teaching semester starts and how many calendar days it lasts; the teaching
+// load's pace ("how much should be done by today") is measured against it.
+type Semester struct {
+	Start string `json:"start"`
+	Days  int    `json:"days"`
+}
+
+// Semester returns the saved semester, or the owner's default: 14 September 2026, 90 days.
+func (s *Store) Semester() (Semester, error) {
+	out := Semester{Start: "2026-09-14", Days: 90}
+	rows, err := s.db.Query("select key, value from settings where key in ('semester_start', 'semester_days')")
+	if err != nil {
+		return out, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var k, v string
+		if err := rows.Scan(&k, &v); err != nil {
+			return out, err
+		}
+		if k == "semester_start" {
+			out.Start = v
+		} else if n, err := strconv.Atoi(v); err == nil {
+			out.Days = n
+		}
+	}
+	return out, rows.Err()
+}
+
+// SetSemester saves the semester's first day (YYYY-MM-DD) and its length in days.
+func (s *Store) SetSemester(start any, days any) error {
+	date, err := cleanDate(start)
+	if err != nil {
+		return err
+	}
+	n := -1
+	switch t := days.(type) {
+	case float64:
+		if t == float64(int(t)) {
+			n = int(t)
+		}
+	case string:
+		if v, err := strconv.Atoi(strings.TrimSpace(t)); err == nil {
+			n = v
+		}
+	}
+	if n < 30 || n > 200 {
+		return invalid("kunlar 30 va 200 orasida bo'lsin")
+	}
+	return s.tx(func(tx *sql.Tx) error {
+		for k, v := range map[string]string{"semester_start": date, "semester_days": strconv.Itoa(n)} {
+			if _, err := tx.Exec("insert into settings (key, value) values (?, ?) on conflict (key) do update set value = excluded.value", k, v); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 // ---------------------------------------------------------------- digital.oxu.uz snapshot
 
 // SaveOxu replaces the data last synced from digital.oxu.uz (JSON).

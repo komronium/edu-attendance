@@ -13,3 +13,6 @@ oxu_cookie.tmp
 .claude/settings.local.json
 .impeccable/config.local.json
 .impeccable/mocks/
+
+# brainstorm mockups and plan scratch
+.superpowers/

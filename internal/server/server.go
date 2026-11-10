@@ -638,6 +638,17 @@ func (s *Server) routes() {
 		}
 		return 200, okBody, db.SetCoursePlanHours(b["hours"])
 	})
+	s.handle("GET /api/semester", func(r *http.Request) (int, any, error) {
+		v, err := db.Semester()
+		return 200, v, err
+	})
+	s.handle("PUT /api/semester", func(r *http.Request) (int, any, error) {
+		b, err := body(r)
+		if err != nil {
+			return 0, nil, err
+		}
+		return 200, okBody, db.SetSemester(b["start"], b["days"])
+	})
 
 	// data synced from digital.oxu.uz
 	s.handle("GET /api/oxu", func(r *http.Request) (int, any, error) {
