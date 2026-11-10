@@ -1497,7 +1497,8 @@ async function cabinetView() {
         if (await act(() => api("DELETE", "/api/oxu/cookie"))) cabinetView();
       } })));
   const head = pageHead("Kabinet", synced_at ? "digital.oxu.uz ma'lumotlari" : "Hali sinxronlanmagan");
-  if (!data) return show(head, form, h("p", { class: "card empty", text: "Jadval, yuklama va KPI o'z bo'limlarida ko'rinadi. Yuqorida birinchi sinxronlashni bajaring." }));
+  const semesterCard = await semesterForm();
+  if (!data) return show(head, form, semesterCard, h("p", { class: "card empty", text: "Jadval, yuklama va KPI o'z bo'limlarida ko'rinadi. Yuqorida birinchi sinxronlashni bajaring." }));
 
   // an overview: every synced section, one click away; the app's own group counts like the site's
   const t = today(), clock = nowTime(), monday = shiftDay(t, -((dowOf(t) + 6) % 7));
@@ -1518,7 +1519,27 @@ async function cabinetView() {
       card("#/jadval", "Dars jadvali", weekLessons + " ta dars", "Shu hafta, " + COURSE.group + " bilan"),
       card("#/yuklama", "Yuklama", hrs(monthHours) + " soat", load ? monthName + "da o'tildi · semestr " + hrs(total(load.lines).plan) + " soat" : monthName + "da o'tildi"),
       card("#/ilmiy-kpi", "Ilmiy KPI", score.toFixed(2) + " ball", ((data.kpi && data.kpi.papers.length) || 0) + " ta ish"),
-      card("#/ustama", "Ustama", bonus.known ? hrs(bonus.value) + "%" : "–", monthName + (bonus.onSite ? ", saytda tasdiqlangan" : ", belgilangan bandlardan"))));
+      card("#/ustama", "Ustama", bonus.known ? hrs(bonus.value) + "%" : "–", monthName + (bonus.onSite ? ", saytda tasdiqlangan" : ", belgilangan bandlardan"))),
+    semesterCard);
+}
+// the calendar the teaching load's pace is measured against; the site does not give it
+async function semesterForm() {
+  const sem = await api("GET", "/api/semester");
+  const start = dateField("start", sem.start);
+  const days = h("input", { name: "days", type: "text", inputmode: "numeric", value: String(sem.days), autocomplete: "off", required: true });
+  const end = () => { const iso = start.input.value, n = Number(days.value); return iso && n >= 1 ? "Oxirgi kun: " + longDay(shiftDay(iso, n - 1)) : ""; };
+  const endLine = h("p", { class: "sub", text: end() });
+  start.input.addEventListener("change", () => { endLine.textContent = end(); });
+  days.addEventListener("input", () => { endLine.textContent = end(); });
+  return h("section", { class: "card" }, h("h2", { text: "Semestr" }),
+    h("p", { class: "sub", text: "Yuklamadagi \"shu kungacha qancha o'tilishi kerak edi\" hisobi shu kunlarga qarab olinadi." }),
+    h("form", { class: "semester-form", onsubmit: async (e) => {
+        e.preventDefault();
+        if (await act(() => api("PUT", "/api/semester", { start: start.input.value, days: days.value.trim() }))) say("Saqlandi", true);
+      } },
+      field("Boshlanishi", start), field("Davomiyligi, kun", days),
+      h("button", { type: "submit", class: "primary", text: "Saqlash" })),
+    endLine);
 }
 
 /* ------------------------------------------------------------ scientific KPI */
@@ -1860,6 +1881,36 @@ async function refreshNotes() {
 }
 setInterval(refreshNotes, 60000);
 
+// a Chrome reminder 15 minutes before a lesson, while the page is open; each lesson is announced once
+const REMIND_MIN = 15;
+let reminderCtx = null;
+async function lessonReminder() {
+  if (!canNotify || Notification.permission !== "granted") return;
+  const t = today(), now = nowTime(), mins = (x) => Number(x.slice(0, 2)) * 60 + Number(x.slice(3, 5));
+  try {
+    if (!reminderCtx || reminderCtx.day !== t) {
+      const [{ data }, { sessions }, { items }] = await Promise.all([api("GET", "/api/oxu"), api("GET", "/api/sessions"), api("GET", "/api/cancelled")]);
+      reminderCtx = { day: t, ctx: lessonContext(sessions, data, new Set(items.map((c) => cancelKey(c.date, c.para, c.subject)))) };
+    }
+  } catch (err) { return; }
+  let done = "";
+  try { done = localStorage.getItem("reminded") || ""; } catch (err) { /* reminders may repeat after a reload */ }
+  for (const e of entriesFor([t], reminderCtx.ctx)) {
+    const times = PARA_TIMES[e.para], key = t + "|" + e.para;
+    if (!times || done.split(",").includes(key)) continue;
+    const left = mins(times[0]) - mins(now);
+    if (left < 0 || left > REMIND_MIN) continue;
+    const site = e.kind === "site";
+    const pop = new Notification((site ? e.lesson.subject : COURSE.subject) + ", " + left + " daqiqadan keyin", {
+      body: [e.para + "-para, " + times[0], site ? e.lesson.group : COURSE.group, site ? fmtRoom(e.lesson.room) : COURSE.room].filter(Boolean).join(" · "), tag: "lesson-" + key });
+    pop.onclick = () => { window.focus(); location.hash = "#/"; pop.close(); };
+    done = [...done.split(",").filter((k) => k.startsWith(t)), key].join(",");
+    try { localStorage.setItem("reminded", done); } catch (err) { /* see above */ }
+  }
+}
+setInterval(lessonReminder, 60000);
+lessonReminder();
+
 async function notesView() {
   const { items, unread } = await api("GET", "/api/notifications");
   const permission = canNotify ? Notification.permission : "unsupported";
@@ -1870,7 +1921,7 @@ async function notesView() {
     } });
   const notice = permission === "granted" ? h("p", { class: "sub", text: "Chrome bildirishnomalari yoqilgan. Ular sahifa ochiq turganda keladi." })
     : permission === "denied" ? h("p", { class: "sub", text: "Chrome bildirishnomalari bloklangan. Manzil satridagi belgi orqali ruxsat bering." })
-    : permission === "default" ? h("section", { class: "card note-cta" }, h("div", {}, h("h2", { text: "Chrome orqali ham olish" }), h("p", { class: "sub", text: "Yangi yoki olib tashlangan darslar va olinmagan davomatlar haqida xabar keladi, sahifa ochiq turganda." })), enable) : null;
+    : permission === "default" ? h("section", { class: "card note-cta" }, h("div", {}, h("h2", { text: "Chrome orqali ham olish" }), h("p", { class: "sub", text: "Yangi yoki olib tashlangan darslar, olinmagan davomatlar va dars boshlanishiga 15 daqiqa qolgani haqida xabar keladi, sahifa ochiq turganda." })), enable) : null;
   const when = (ts) => { const iso = new Date(ts * 1000).toLocaleDateString("en-CA", { timeZone: TZ }); return capital(relDay(iso) || dayText(iso)) + ", " + timeText(ts); };
   show(pageHead("Bildirishnomalar", unread ? unread + " ta yangi" : "Hammasi o'qilgan"), notice,
     items.length ? h("ul", { class: "plain note-list" }, items.map((n) => {

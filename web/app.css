@@ -638,6 +638,9 @@ ul.history { display: grid; gap: var(--s2); margin-top: var(--s3); }
 .sync-row input { flex: 1; min-width: 0; }
 .sync .sub { font-size: var(--t-sm); }
 
+.semester-form { display: grid; grid-template-columns: 220px 160px auto; gap: var(--s3); align-items: end; justify-content: start; margin-top: var(--s4); }
+.semester-form + .sub { margin-top: var(--s2); font-size: var(--t-sm); }
+
 /* ------------------------------------------------------------ debts */
 .card.flush.master { position: sticky; top: var(--s5); max-height: calc(100vh - 48px); overflow: auto; }
 .pick { width: 100%; justify-content: space-between; gap: var(--s2); min-height: 40px; padding: var(--s2) var(--s3); border: 0; border-radius: 0; background: none; font-weight: 500; text-align: left; white-space: normal; }
