@@ -178,8 +178,7 @@ function openSheet(title, body) {
 }
 async function refreshBadge() {
   const badge = document.getElementById("owed-badge");
-  const groupBadge = document.getElementById("owed-badge-group");
-  try { const { owed } = await api("GET", "/api/retakes"); badge.textContent = groupBadge.textContent = String(owed); badge.hidden = groupBadge.hidden = !owed; } catch (err) { badge.hidden = groupBadge.hidden = true; }
+  try { const { owed } = await api("GET", "/api/retakes"); badge.textContent = String(owed); badge.hidden = !owed; } catch (err) { badge.hidden = true; }
   refreshNotes();
   try {
     const { state, last_sync: last } = await api("GET", "/api/oxu/status");
@@ -191,18 +190,8 @@ async function refreshBadge() {
 }
 
 /* ------------------------------------------------------------ sidebar */
-const COURSE_PAGES = ["lessons", "students", "retakes"];
 const PAGE_TITLES = { home: "Bosh sahifa", schedule: "Dars jadvali", plans: "Dars rejasi", load: "Yuklama", kpi: "Ilmiy KPI", months: "Ustama", lessons: "Darslar", students: "Talabalar", retakes: "Qarzlar", notes: "Bildirishnomalar", cabinet: "Kabinet" };
-function setCourseOpen(open, remember) {
-  document.getElementById("course-group").classList.toggle("open", open);
-  document.getElementById("course-items").hidden = !open;
-  const toggle = document.getElementById("course-toggle");
-  toggle.setAttribute("aria-expanded", String(open));
-  toggle.setAttribute("aria-label", open ? "Kurs bo'limlarini yopish" : "Kurs bo'limlarini ochish");
-  if (remember) try { localStorage.setItem("courseOpen", open ? "1" : ""); } catch (err) { /* only a convenience */ }
-}
-document.getElementById("course-toggle").addEventListener("click", () => setCourseOpen(document.getElementById("course-items").hidden, true));
-try { if (localStorage.getItem("courseOpen")) setCourseOpen(true); } catch (err) { /* starts closed */ }
+document.getElementById("course-name").textContent = COURSE.group;
 
 /* ------------------------------------------------------------ routes */
 const routes = [
@@ -229,9 +218,6 @@ async function route() {
       if (a.dataset.nav === nav) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
     });
     document.title = (PAGE_TITLES[nav] ? PAGE_TITLES[nav] + " · " : "") + "attendance";
-    const inCourse = COURSE_PAGES.includes(nav);
-    document.getElementById("course-group").classList.toggle("active", inCourse);
-    if (inCourse) setCourseOpen(true);
     refreshBadge();
     const loading = setTimeout(() => show(skeleton()), 120);
     if (!subjectStyles.loaded) await loadStyles();

@@ -193,6 +193,9 @@ func serve(demo bool, dataDir, bind string, port int, noLogin bool) error {
 	if err != nil {
 		return err
 	}
+	if dir := os.Getenv("ATTENDANCE_WEB"); dir != "" { // development: serve the page from disk, so an edit needs only a reload
+		web = os.DirFS(dir)
+	}
 	handler, err := server.New(server.Config{Store: db, Auth: a, Web: web, SecureCookie: os.Getenv("ATTENDANCE_SECURE_COOKIE") == "1", CookieFile: filepath.Join(dataDir, "oxu_cookie")})
 	if err != nil {
 		return err

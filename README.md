@@ -23,6 +23,7 @@ Commands: `run` (default), `set-password`, `demo`, `import FILE`. Run `attendanc
 Environment (each has a matching flag): `ATTENDANCE_DATA` (default `/var/lib/attendance`),
 `ATTENDANCE_BIND` (default `127.0.0.1`), `ATTENDANCE_PORT` (default `8766`),
 `ATTENDANCE_PASSWORD` (for `set-password`), `ATTENDANCE_SECURE_COOKIE=1` (when served over HTTPS).
+While working on the page, `ATTENDANCE_WEB=./web` serves it from disk instead of the built-in copy.
 
 ## Login to digital.oxu.uz (Chrome extension)
 
