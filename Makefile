@@ -9,7 +9,7 @@ linux:
 test:
 	go vet ./...
 	go test ./...
-	node --test webtest/
+	node --test webtest/*.test.js
 
 demo: build
 	./bin/attendance demo --no-login

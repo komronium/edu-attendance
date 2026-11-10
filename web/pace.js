@@ -1,6 +1,6 @@
 "use strict";
 // The arithmetic behind "am I ahead or behind": how far the semester is, how many hours that asks
-// for, and how the hours held compare. No DOM here, so it is tested with `node --test webtest/`.
+// for, and how the hours held compare. No DOM here, so it is tested with `node --test webtest/*.test.js`.
 (function (root) {
   const DAY = 864e5;
   const utc = (iso) => { const [y, m, d] = iso.split("-").map(Number); return Date.UTC(y, m - 1, d); };

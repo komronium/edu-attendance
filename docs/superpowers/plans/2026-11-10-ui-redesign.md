@@ -54,7 +54,7 @@ Tests for 2, 3 and 5 belong to Task 2 (`webtest/pace.test.js`); 1 and 4 are chec
 
 ### Task 2: Pace helpers
 
-**Files:** Create `web/pace.js`, `webtest/pace.test.js`; Modify `web/index.html` (script tag before `app.js`), `Makefile` (`test` also runs `node --test webtest/`).
+**Files:** Create `web/pace.js`, `webtest/pace.test.js`; Modify `web/index.html` (script tag before `app.js`), `Makefile` (`test` also runs `node --test webtest/*.test.js`).
 
 **Interfaces — Produces** (global `Pace`, also `module.exports`):
 - `Pace.dayNumber(startISO, days, todayISO) -> int` — 1 on the start date, clamped to `0..days`.
@@ -71,7 +71,7 @@ Tests for 2, 3 and 5 belong to Task 2 (`webtest/pace.test.js`); 1 and 4 are chec
   - `summary([{plan:10,done:10,noAtt:0,closed:true}], 0.5)` → `expected === null`, `diff === null`
   - `weekly(210, 130, 59, 90)` → `fmt1(current) === "24,9"`, `fmt1(required) === "29,4"`, `Math.round(projected) === 320`; `weekly(10, 5, 90, 90).required === null`
   - `fmt1(null) === "–"`, `fmt1(61.75) === "61,8"`
-- [ ] **Step 2:** `node --test webtest/` → FAIL.
+- [ ] **Step 2:** `node --test webtest/*.test.js` → FAIL.
 - [ ] **Step 3:** implement `web/pace.js`.
 - [ ] **Step 4:** `make test` → PASS.
 - [ ] **Step 5:** commit `Pace helpers for the teaching load`.
