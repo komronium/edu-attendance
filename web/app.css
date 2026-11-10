@@ -322,6 +322,15 @@ button.key:hover { background: var(--surface-2); }
 .missing > summary .muted { font-size: var(--t-sm); }
 .head-actions button:has(.icon) { padding-inline: var(--s2); }
 
+/* the bonus page's lead (Ustama) */
+.hero-load { display: grid; gap: var(--s4); padding: var(--s5) var(--pad); }
+.hero-top { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--s5); }
+.hero-load .label { display: block; color: var(--muted); font-size: var(--t-sm); font-weight: 500; }
+.hero-load .big { display: block; font-size: 2.5rem; line-height: 1.1; font-weight: 700; letter-spacing: -.02em; }
+.hero-load .legend { margin-top: 0; }
+.hero-load .key { color: var(--muted); font-weight: 500; }
+.hero-load .key b { color: var(--text); font-weight: 700; }
+
 /* ------------------------------------------------------------ teaching load */
 .sem-line { margin-top: -16px; color: var(--muted); font-size: var(--t-sm); }
 .sem-line b { color: var(--text); font-weight: 600; }
