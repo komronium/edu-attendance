@@ -2,7 +2,9 @@ package oxu
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // Change is something worth telling the teacher after a sync.
@@ -13,7 +15,20 @@ type Change struct {
 	Link  string
 }
 
-const mergeAbove = 3 // more changes of one kind than this become a single notice
+// paraEnd is when each para ends: the university's fixed times.
+var paraEnd = map[int]string{1: "09:50", 2: "11:20", 3: "12:50", 4: "14:40", 5: "16:10", 6: "17:40", 7: "19:10", 8: "20:40", 9: "22:10"}
+
+// over reports whether the lesson's para had ended at t (Tashkent time). A lesson whose para is
+// unknown counts as over once its day is.
+func over(l Lesson, t time.Time) bool {
+	day, clock := t.Format("2006-01-02"), t.Format("15:04")
+	if l.Date != day {
+		return l.Date < day
+	}
+	n, err := strconv.Atoi(l.Para)
+	end, ok := paraEnd[n]
+	return err == nil && ok && end <= clock
+}
 
 func lessonKey(l Lesson) string { return l.Date + "|" + l.Para + "|" + l.Group + "|" + l.Subject }
 
@@ -33,27 +48,33 @@ func keys(list []Lesson) map[string]bool {
 	return out
 }
 
+// notice makes one notice for all lessons of a kind: a line per lesson, so none is hidden behind "and more".
 func notice(kind, one, many, link string, list []Lesson) []Change {
-	if len(list) > mergeAbove {
-		lines := make([]string, 0, 2)
-		for _, l := range list[:2] {
-			lines = append(lines, describe(l))
-		}
-		body := strings.Join(lines, "; ") + fmt.Sprintf(" va yana %d ta", len(list)-2)
-		return []Change{{Kind: kind, Title: fmt.Sprintf(many, len(list)), Body: body, Link: link}}
+	if len(list) == 0 {
+		return nil
 	}
-	out := make([]Change, 0, len(list))
+	lines := make([]string, 0, len(list))
 	for _, l := range list {
-		out = append(out, Change{Kind: kind, Title: one, Body: describe(l), Link: link})
+		lines = append(lines, describe(l))
 	}
-	return out
+	title := one
+	if len(list) > 1 {
+		title = fmt.Sprintf(many, len(list))
+	}
+	return []Change{{Kind: kind, Title: title, Body: strings.Join(lines, "\n"), Link: link}}
 }
 
-// Changes compares two syncs. Past lessons never count as added or removed, because the window the
-// schedule is read over moves with time. Without a previous sync there is nothing to compare.
-func Changes(prev, next *Data, today string) []Change {
+// Changes compares two syncs made at prevAt and now (Tashkent time). Past lessons never count as
+// added or removed, because the window the schedule is read over moves with time. Attendance is
+// missing only once the lesson's para has ended: the site lists a lesson as unsaved from the morning
+// of its day. Without a previous sync there is nothing to compare.
+func Changes(prev, next *Data, now, prevAt time.Time) []Change {
 	if prev == nil || next == nil {
 		return nil
+	}
+	today := now.Format("2006-01-02")
+	if prevAt.IsZero() {
+		prevAt = now
 	}
 	var out []Change
 	if prev.Lessons != nil {
@@ -76,7 +97,8 @@ func Changes(prev, next *Data, today string) []Change {
 		before := keys(prev.Unsaved)
 		var missing []Lesson
 		for _, l := range next.Unsaved {
-			if !before[lessonKey(l)] {
+			// told once: when the lesson is over and was not already over, and listed, at the last sync
+			if over(l, now) && !(before[lessonKey(l)] && over(l, prevAt)) {
 				missing = append(missing, l)
 			}
 		}

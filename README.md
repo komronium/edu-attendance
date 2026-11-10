@@ -96,6 +96,9 @@ but listed as unsaved on the site are shown separately. A closed group's plan is
 actually got, with the site's figure in a tooltip. Mustaqil ta'lim is not scheduled and is not
 counted. 2-ATT-25 is not in the site's load: its taught hours are finished lessons in this app, and
 its planned hours default to an estimate of 200 (`COURSE.planHours`) and can be changed on the page.
+The Jadvalda column counts lessons that are in the timetable but not held yet (the lighter cards); it is a
+lesson count, not hours. Attendance counts as missing only once the lesson's para has ended, on the page
+and in notifications.
 
 ## Scientific KPI
 

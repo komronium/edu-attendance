@@ -222,7 +222,9 @@ func (s *Syncer) run(ctx context.Context, cookie string, replacing bool) ([]stri
 
 func (s *Syncer) fetch(ctx context.Context, cookie, owner string) ([]string, error) {
 	var prev *oxu.Data
-	if raw, _ := s.Snapshot(); raw != nil {
+	var prevAt time.Time
+	if raw, at := s.Snapshot(); raw != nil {
+		prevAt = time.Unix(int64(at), 0).In(store.Tashkent())
 		prev = &oxu.Data{}
 		if json.Unmarshal(raw, prev) != nil {
 			prev = nil
@@ -241,8 +243,7 @@ func (s *Syncer) fetch(ctx context.Context, cookie, owner string) ([]string, err
 	if err := s.db.SaveOxu(raw); err != nil {
 		return nil, err
 	}
-	today := s.now().In(store.Tashkent()).Format("2006-01-02")
-	for _, c := range oxu.Changes(prev, data, today) {
+	for _, c := range oxu.Changes(prev, data, s.now().In(store.Tashkent()), prevAt) {
 		if err := s.db.AddNotification(c.Kind, c.Title, c.Body, c.Link); err != nil {
 			slog.Error("notification", "err", err)
 		}

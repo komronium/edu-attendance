@@ -659,7 +659,13 @@ function capital(t) { return t[0].toUpperCase() + t.slice(1); }
 // "4-o'quv bino, 306-informatika xonasi" -> "K4 / 306"
 function fmtRoom(r) { const m = /^(\d+)-o.quv bino,\s*([\d/]+)/.exec(r || ""); return m ? "K" + m[1] + " / " + m[2] : r || ""; }
 function fmtType(t) { return /amaliy/i.test(t) ? "Amaliy" : /ma.ruza/i.test(t) ? "Ma'ruza" : t || ""; }
-function state(text, iconName, cls) { return h("span", { class: "state-line" + (cls ? " " + cls : "") }, iconName ? icon(iconName) : null, text); }
+// the timetable cell is narrow: its status shows the short form, so the room is never cut off
+const SHORT_STATE = { "Davomatni boshlash": "Boshlash" };
+function state(text, iconName, cls) {
+  const short = SHORT_STATE[text];
+  return h("span", { class: "state-line" + (cls ? " " + cls : "") }, iconName ? icon(iconName) : null,
+    short ? [h("span", { class: "full", text }), h("span", { class: "short", "aria-hidden": "true", text: short })] : text);
+}
 
 // a card has the subject's colour: full when attendance is taken, a lighter shade otherwise
 function cardLines(subject, type, group, room, status) {   // room and status share the last line: a week should fit one screen
@@ -707,7 +713,7 @@ function nowLine(p, now) {
 }
 // a lesson still to come opens its plan; one that is over opens the site, where its attendance is taken
 function siteCard(l, unsaved, color, e) {
-  const t = today(), past = l.date < t;
+  const t = today(), past = lessonOver(l);
   const taken = unsaved && past && !unsaved.has(l.date + "|" + Number(l.para));
   const coming = e && !paraOver(e, t, nowTime());
   // without status data a past lesson simply shows no status line
@@ -809,6 +815,8 @@ function entriesFor(dates, ctx) {
 }
 
 const paraOver = (e, t, now) => e.date < t || (e.date === t && !!PARA_TIMES[e.para] && PARA_TIMES[e.para][1] <= now);
+// the site lists a lesson as "unsaved" from the morning of its day; it is only missing once its para has ended
+const lessonOver = (l) => paraOver({ date: l.date, para: Number(l.para) }, today(), nowTime());
 // this app is the only record for the group, so every lesson that ended without finished attendance counts
 function courseGaps(ctx, t, now) {
   if (!ctx.firstDay) return [];
@@ -1040,7 +1048,7 @@ async function plansView() {
     const p = planOf(e), info = entryInfo(e), n = p ? p.items.length : 0;
     const open = () => openPlan(e, redraw, sessions);
     return h("tr", { class: "tap", onclick: (ev) => { if (!ev.target.closest("button")) open(); } },
-      h("td", { class: "nowrap strong para", text: e.para + "-para" }),
+      h("td", { class: "nowrap strong para" }, e.para + "-para", PARA_TIMES[e.para] ? h("small", { class: "muted", text: PARA_TIMES[e.para][0] + "–" + PARA_TIMES[e.para][1] }) : null),
       h("td", { class: "lesson" }, h("span", { class: "key " + colorOf(info.name) }, h("i"), info.name),
         h("small", {}, ordinal(e), info.group ? h("span", { class: "muted", text: info.group }) : null)),
       h("td", { class: "topic" + (p && p.topic ? "" : " muted") }, p && p.topic ? p.topic : "Mavzu yozilmagan",
@@ -1051,7 +1059,7 @@ async function plansView() {
   const table = (list) => {
     const days = [...new Set(list.map((x) => x.date))];
     return h("div", { class: "card flush" }, h("table", { class: "plans" }, days.map((d) => h("tbody", {},
-      h("tr", { class: "group" }, h("th", { colspan: "4", scope: "colgroup", text: dayTitle(d) })),
+      h("tr", { class: "group" + (d === t ? " today" : "") }, h("th", { colspan: "4", scope: "colgroup" }, h("span", { text: dayTitle(d) }), h("small", { text: list.filter((x) => x.date === d).length + " ta dars" }))),
       list.filter((x) => x.date === d).sort((a, b) => a.para - b.para).map((x) => x.row)))));
   };
   const outcomeBtn = (e) => h("button", { type: "button", class: "quiet", text: "Natijani belgilash", onclick: () => openPlan(e, redraw, sessions) });
@@ -1154,7 +1162,7 @@ async function scheduleView() {
     h("span", { class: "muted hint", text: "To'liq rang: davomat olingan. Kelgusi darsni bosing: reja va tayyorlik." }));
   // this semester's gaps are what needs attention; older ones stay available below them
   const start = (data && data.load && data.load.start) || "";
-  const live = (unsavedList || []).filter((l) => !cancelled.has(cancelKey(l.date, l.para, l.subject)));
+  const live = (unsavedList || []).filter((l) => lessonOver(l) && !cancelled.has(cancelKey(l.date, l.para, l.subject)));
   const current = live.filter((l) => l.date >= start), older = live.filter((l) => l.date < start);
   const missingRow = (l) => h("tr", {},
     h("td", { class: "nowrap strong", text: dayText(l.date) }), h("td", { class: "nowrap muted", text: l.para + "-para" }), h("td", { class: "clip", text: l.subject }),
@@ -1214,19 +1222,28 @@ function computeLoad(data, sessions, coursePlan, cancelled) {
     const done = held.length * HOURS_PER_PARA - noAtt;
     // a closed group will not be taught any more, so what it got is its plan; the site's figure stays for the tooltip
     const sitePlan = Number(item.hours), closed = /yopildi/i.test(item.group), plan = closed ? done + noAtt : sitePlan;
-    lines.push({ subject, type: fmtType(item.type), group: item.group.replace(/_yopildi.*/i, ""), plan, sitePlan, done, noAtt, closed, left: Math.max(0, plan - done - noAtt) });
+    // lessons in the timetable that have not been held yet (the lighter cards)
+    const queued = closed ? 0 : mine.filter((l) => !ended(l)).length;
+    lines.push({ subject, type: fmtType(item.type), group: item.group.replace(/_yopildi.*/i, ""), plan, sitePlan, done, noAtt, closed, queued, left: Math.max(0, plan - done - noAtt) });
   }
   // the group taught in this app is not in the site's load: finished lessons here, planned hours entered by hand
   const courseDone = sessions.filter((s) => s.finished_at && s.date >= start).length * HOURS_PER_PARA;
   const coursePlanHours = coursePlan ?? COURSE.planHours;
   const course = { subject: COURSE.subject, type: COURSE.type, group: COURSE.group, plan: coursePlanHours, done: courseDone, noAtt: 0, course: true, left: Math.max(0, coursePlanHours - courseDone) };
+  // its timetable is generated week after week: count as far as the site's schedule reaches (at least two weeks), never past the hours left
+  const ctx = lessonContext(sessions, data, cancelled);
+  const lastSite = (data.lessons || []).reduce((m, l) => (l.date > m ? l.date : m), shiftDay(t, 13));
+  const ahead = [];
+  for (let d = t; d <= lastSite && ahead.length < 60; d = shiftDay(d, 1)) ahead.push(d);
+  course.queued = Math.min(Math.ceil(course.left / HOURS_PER_PARA),
+    entriesFor(ahead, ctx).filter((e) => e.kind === "course" && !paraOver(e, t, now) && !(e.session && e.session.finished_at)).length);
   lines.unshift(course);
 
   return { lines, independent, course, coursePlanHours };
 }
 const total = (list) => ({
   plan: list.reduce((n, l) => n + (l.plan || 0), 0), done: list.reduce((n, l) => n + l.done, 0),
-  noAtt: list.reduce((n, l) => n + l.noAtt, 0), left: list.reduce((n, l) => n + (l.left || 0), 0),
+  noAtt: list.reduce((n, l) => n + l.noAtt, 0), left: list.reduce((n, l) => n + (l.left || 0), 0), queued: list.reduce((n, l) => n + (l.queued || 0), 0),
 });
 
 async function loadView() {
@@ -1255,8 +1272,9 @@ async function loadView() {
   const numbers = (l, planNode) => [
     h("td", { class: "num" }, planNode ?? hrs(l.plan)),
     h("td", { class: "num" + quiet(l.done), text: hrs(l.done) }),
-    h("td", { class: "num" + quiet(l.noAtt), text: hrs(l.noAtt) }),
+    h("td", { class: "num" + quiet(l.noAtt), text: l.noAtt ? hrs(l.noAtt) : "–" }),
     h("td", { class: "num" + quiet(l.left), text: hrs(l.left) }),
+    h("td", { class: "num" + quiet(l.queued), title: l.queued ? l.queued + " ta dars jadvalda, hali o'tilmagan (" + hrs(l.queued * HOURS_PER_PARA) + " soat)" : null, text: l.queued ? l.queued + " ta" : "–" }),
     h("td", { class: "w-rate" }, progress(l))];
 
   // the estimate reads as plain text; clicking its row turns it into a field. Enter or leaving saves, Esc cancels
@@ -1303,7 +1321,7 @@ async function loadView() {
   const hero = h("section", { class: "card hero-load", "aria-label": "Umumiy yuklama" },
     h("div", { class: "load-sums" },
       sum("O'tilgan", hrs(held(all)), all.noAtt ? "shundan " + hrs(all.noAtt) + " soat davomatsiz" : "kurs va tizim birga"),
-      sum("Qolgan", est + hrs(all.left), est ? "kurs rejasi taxminiy" : "kurs va tizim birga"),
+      sum("Qolgan", est + hrs(all.left), all.queued ? "shundan jadvalda " + all.queued + " ta dars" : est ? "kurs rejasi taxminiy" : "kurs va tizim birga"),
       sum("Jami reja", est + hrs(all.plan), all.plan ? pct(100 * held(all) / all.plan) + " bajarildi" : null)),
     stack(all, "tall"),
     h("table", { class: "load-parts" },
@@ -1316,11 +1334,11 @@ async function loadView() {
     hero,
     h("div", { class: "card flush" }, h("table", { class: "load" },
       h("thead", {}, h("tr", {}, h("th", { scope: "col", text: "Fan va guruh" }), h("th", { scope: "col", text: "Turi" }),
-        ["Reja", "O'tilgan", "Davomatsiz", "Qolgan"].map((x) => h("th", { scope: "col", class: "num", text: x })), h("th", { scope: "col", class: "w-rate", text: "Bajarilishi" }))),
+        [["Reja"], ["O'tilgan"], ["Davomatsiz"], ["Qolgan"], ["Jadvalda", "Jadvalda bor, hali o'tilmagan darslar soni"]].map(([x, tip]) => h("th", { scope: "col", class: "num", title: tip || null, text: x })), h("th", { scope: "col", class: "w-rate", text: "Bajarilishi" }))),
       groups)),
     h("div", { class: "notes" },
       extra.length ? h("p", {}, h("b", { text: "Mustaqil ta'lim: " + hrs(extra.reduce((n, [, v]) => n + v, 0)) + " soat" }), " (" + extra.map(([n, v]) => n + " " + hrs(v)).join(", ") + "). Jadvalga kirmaydi va hisobga qo'shilmagan.") : null,
-      h("p", { text: "1 para = 2 soat. O'tilgan soatlar dars jadvalidan hisoblanadi, sayt bu raqamni bermaydi. Davomatsiz: dars vaqti o'tgan, lekin saytda davomat saqlanmagan. Yopilgan guruhlarda reja o'tilgan soatga teng olingan. " + COURSE.group + " saytdagi yuklamada yo'q: rejasi taxminiy, o'tilgani shu ilovadagi tugatilgan darslardan." })));
+      h("p", { text: "1 para = 2 soat. O'tilgan soatlar dars jadvalidan hisoblanadi, sayt bu raqamni bermaydi. Davomatsiz: dars vaqti o'tgan, lekin saytda davomat saqlanmagan. Jadvalda: dars jadvalda bor (jadvaldagi och rangli kartalar), lekin hali o'tilmagan; dars soni, soat emas. Yopilgan guruhlarda reja o'tilgan soatga teng olingan. " + COURSE.group + " saytdagi yuklamada yo'q: rejasi taxminiy, o'tilgani shu ilovadagi tugatilgan darslardan." })));
 }
 
 /* ------------------------------------------------------------ cabinet (digital.oxu.uz) */
@@ -1735,6 +1753,23 @@ async function monthsView() {
 }
 
 /* ------------------------------------------------------------ notifications */
+// A notice lists its lessons one per line, "10.11.2026, 6-para: Subject · Group". Older notices joined them with "; "
+// and ended with "va yana N ta"; both are read, so every notice shows its lessons as separate rows.
+function noteLessons(n) {
+  const lines = (n.body || "").includes("\n") ? n.body.split("\n") : (n.body || "").split("; ");
+  const list = [];
+  let more = 0;
+  for (let line of lines) {
+    line = line.trim();
+    const tail = /\s+va yana (\d+) ta$/.exec(line);
+    if (tail) { more = Number(tail[1]); line = line.slice(0, tail.index); }
+    const m = /^(\d{2})\.(\d{2})\.(\d{4}), (\d+)-para: (.+)$/.exec(line);
+    if (!m) return { list: [], more: 0 };   // not a lesson notice: the plain text is shown
+    const cut = m[5].lastIndexOf(" · ");
+    list.push({ iso: m[3] + "-" + m[2] + "-" + m[1], para: Number(m[4]), subject: cut < 0 ? m[5] : m[5].slice(0, cut), group: cut < 0 ? "" : m[5].slice(cut + 3) });
+  }
+  return { list, more };
+}
 const NOTE_ICONS = { lesson_added: "plus", lesson_removed: "x", attendance_missing: "alert" };
 const canNotify = "Notification" in window;
 function lastShown(set) {
@@ -1770,10 +1805,20 @@ async function notesView() {
     : permission === "default" ? h("section", { class: "card note-cta" }, h("div", {}, h("h2", { text: "Chrome orqali ham olish" }), h("p", { class: "sub", text: "Yangi yoki olib tashlangan darslar va olinmagan davomatlar haqida xabar keladi, sahifa ochiq turganda." })), enable) : null;
   const when = (ts) => { const iso = new Date(ts * 1000).toLocaleDateString("en-CA", { timeZone: TZ }); return capital(relDay(iso) || dayText(iso)) + ", " + timeText(ts); };
   show(pageHead("Bildirishnomalar", unread ? unread + " ta yangi" : "Hammasi o'qilgan"), notice,
-    items.length ? h("ul", { class: "card flush plain notes" }, items.map((n) => h("li", { class: n.read_at ? null : "unread" },
-      h("a", { href: n.link || "#/" }, h("span", { class: "note-icon " + n.kind }, icon(NOTE_ICONS[n.kind] || "alert")),
-        h("span", { class: "note-text" }, h("b", { text: n.title }), n.body ? h("span", { class: "muted", text: n.body }) : null),
-        h("small", { class: "muted nowrap", text: when(n.created_at) })))))
+    items.length ? h("ul", { class: "plain note-list" }, items.map((n) => {
+      const lines = noteLessons(n);
+      return h("li", { class: "card note" + (n.read_at ? "" : " unread") },
+        h("a", { href: n.link || "#/", "aria-label": n.title },
+          h("span", { class: "note-icon " + n.kind }, icon(NOTE_ICONS[n.kind] || "alert")),
+          h("div", { class: "note-main" },
+            h("div", { class: "note-head" }, h("b", { text: n.title }), h("small", { class: "muted nowrap", text: when(n.created_at) })),
+            lines.list.length ? h("ul", { class: "plain note-lessons" }, lines.list.map((l) => h("li", {},
+              h("span", { class: "nl-when" }, h("b", { text: shortDate(l.iso) }), h("small", { text: capital(weekday(l.iso)) })),
+              h("span", { class: "nl-para" }, l.para + "-para", PARA_TIMES[l.para] ? h("small", { text: PARA_TIMES[l.para][0] }) : null),
+              h("span", { class: "nl-what" }, h("b", { text: l.subject }), l.group ? h("small", { text: l.group }) : null))),
+              lines.more ? h("li", { class: "nl-more muted", text: "va yana " + lines.more + " ta" }) : null)
+              : n.body ? h("p", { class: "muted", text: n.body }) : null)));
+    }))
       : h("p", { class: "card empty", text: "Hozircha xabar yo'q. Keyingi sinxronlashda o'zgarish bo'lsa, shu yerda chiqadi." }));
   if (unread) { await act(() => api("POST", "/api/notifications/read")); document.getElementById("note-badge").hidden = true; }
 }
@@ -1804,7 +1849,7 @@ async function homeView() {
   const stat = (href, label, value, note) => h("a", { class: "tile link", href }, h("span", { class: "label", text: label }), h("b", { text: String(value) }), note ? h("span", { class: "note", text: note }) : null);
 
   const start = (data && data.load && data.load.start) || "";
-  const gaps = (ctx.unsavedList || []).filter((l) => l.date >= start && !cancelled.has(cancelKey(l.date, l.para, l.subject))).length;
+  const gaps = (ctx.unsavedList || []).filter((l) => l.date >= start && lessonOver(l) && !cancelled.has(cancelKey(l.date, l.para, l.subject))).length;
   const gapList = courseGaps(ctx, t, now), todo = gapList.length;
   // preparation: today's lessons still to come and tomorrow's, and lessons over whose outcome is not marked
   const tomorrow = shiftDay(t, 1);
