@@ -241,6 +241,13 @@ func (s *Server) get(w http.ResponseWriter, r *http.Request) {
 	case p == "/favicon.ico": // browsers ask for it on pages that name no icon
 		s.static(w, r, "/favicon.svg")
 	case p == "/logout":
+		// a logged-in logout also ends every other session (a copied cookie included). It needs the
+		// session cookie, which SameSite=Strict keeps off a link from another site.
+		if s.authed(r) && !s.cfg.Auth.NoLogin {
+			if err := s.cfg.Auth.Rotate(); err != nil {
+				slog.Error("logout: rotate secret", "err", err)
+			}
+		}
 		s.setCookie(w, r, "", -1)
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 	case isPublic(p):
@@ -501,7 +508,7 @@ func (s *Server) routes() {
 			}
 		}
 		if len(names) > 500 {
-			names = names[:500]
+			return 0, nil, &store.ValidationError{Msg: "bir yo'la 500 tadan ko'p ism qo'shib bo'lmaydi"}
 		}
 		added, err := db.AddStudents(names)
 		return 201, map[string]int{"added": added}, err

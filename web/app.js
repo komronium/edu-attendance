@@ -1893,7 +1893,17 @@ async function refreshNotes() {
   }
   if (newest > seen || !seen) lastShown(newest);
 }
-setInterval(refreshNotes, 60000);
+// every minute in view; every five minutes in a background tab (a sync, which makes the notices, runs
+// every 30), so the Chrome pop-ups still come; at once when the tab comes back
+const NOTES_HIDDEN_MS = 5 * 60000;
+let notesAt = 0;
+function pollNotes() {
+  if (document.hidden && Date.now() - notesAt < NOTES_HIDDEN_MS) return;
+  notesAt = Date.now();
+  refreshNotes();
+}
+setInterval(pollNotes, 60000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { notesAt = Date.now(); refreshNotes(); } });
 
 // a Chrome reminder 15 minutes before a lesson, while the page is open; each lesson is announced once
 const REMIND_MIN = 15;

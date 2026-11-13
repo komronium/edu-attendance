@@ -120,7 +120,7 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	if err := s.purgeDeleted(); err != nil {
+	if err := s.PurgeDeleted(); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -880,10 +880,19 @@ func (s *Store) UpdateStudent(id int64, name, active any) error {
 			if err != nil {
 				return err
 			}
-			if dup, err := exists(tx, "select 1 from students where lower(name)=lower(?) and id<>?", clean, id); err != nil {
+			// compared in Go, like AddStudents: SQLite's lower() only folds ASCII, so "Ō" and "ō" would differ
+			others, err := list(tx, "select name from students where id<>?", []any{id}, func(r *sql.Rows) (string, error) {
+				var n string
+				err := r.Scan(&n)
+				return n, err
+			})
+			if err != nil {
 				return err
-			} else if dup {
-				return invalid("bunday ism allaqachon bor")
+			}
+			for _, n := range others {
+				if strings.ToLower(n) == strings.ToLower(clean) {
+					return invalid("bunday ism allaqachon bor")
+				}
 			}
 			if _, err := tx.Exec("update students set name=? where id=?", clean, id); err != nil {
 				return err
@@ -999,12 +1008,11 @@ type StudentRef struct {
 // from the archive, after the lesson started). Adding one who is there already changes nothing.
 func (s *Store) AddToSession(sessionID, studentID int64, present bool) error {
 	return s.tx(func(tx *sql.Tx) error {
-		for _, q := range []string{"select 1 from sessions where id=? and deleted_at is null", "select 1 from students where id=?"} {
-			id := sessionID
-			if strings.Contains(q, "students") {
-				id = studentID
-			}
-			if ok, err := exists(tx, q, id); err != nil {
+		for _, c := range []struct {
+			query string
+			id    int64
+		}{{"select 1 from sessions where id=? and deleted_at is null", sessionID}, {"select 1 from students where id=?", studentID}} {
+			if ok, err := exists(tx, c.query, c.id); err != nil {
 				return err
 			} else if !ok {
 				return ErrNotFound
@@ -1289,7 +1297,9 @@ func (s *Store) RestoreSession(id int64) error {
 // keepDeletedDays is how long a deleted lesson can be restored.
 const keepDeletedDays = 30
 
-func (s *Store) purgeDeleted() error {
+// PurgeDeleted removes lessons deleted more than keepDeletedDays ago. Open runs it, and the server runs it
+// daily, so the limit holds on a service that is not restarted.
+func (s *Store) PurgeDeleted() error {
 	_, err := s.db.Exec("delete from sessions where deleted_at is not null and deleted_at < ?", now()-keepDeletedDays*86400)
 	return err
 }

@@ -2,6 +2,7 @@ package server
 
 import (
 	"html/template"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strings"
@@ -123,5 +124,7 @@ func (s *Server) publicRetakes(w http.ResponseWriter, r *http.Request, token str
 	sort.SliceStable(page.Students, func(i, j int) bool {
 		return strings.ToLower(page.Students[i].Name) < strings.ToLower(page.Students[j].Name)
 	})
-	publicTmpl.Execute(w, page)
+	if err := publicTmpl.Execute(w, page); err != nil {
+		slog.Error("public retakes page", "err", err)
+	}
 }

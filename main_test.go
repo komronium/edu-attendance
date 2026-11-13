@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"attendance/internal/auth"
 	"attendance/internal/store"
 )
 
@@ -82,9 +83,15 @@ func TestBackupCommandCopiesAuthToo(t *testing.T) {
 	dir := t.TempDir()
 	db, _ := store.Open(dbPath(dir))
 	db.Close()
-	os.WriteFile(filepath.Join(dir, "auth.json"), []byte(`{}`), 0o600)
+	if err := auth.Create(filepath.Join(dir, "auth.json"), "parol-123"); err != nil {
+		t.Fatal(err)
+	}
 	out, err := backup(dir, "", 1)
 	if err != nil || len(out) != 2 || !strings.HasSuffix(out[1], ".json") {
 		t.Fatalf("%v %v", out, err)
+	}
+	raw, _ := os.ReadFile(out[1])
+	if strings.Contains(string(raw), "secret") || !strings.Contains(string(raw), `"hash"`) {
+		t.Fatalf("the auth copy must keep the hash and leave out the session secret: %s", raw)
 	}
 }

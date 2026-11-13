@@ -17,7 +17,7 @@ jobs:
       - name: vet, race tests, JS tests
         run: make test
       - name: known vulnerabilities in the code that is called
-        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
       - name: browser smoke test
         run: make e2e
         env:

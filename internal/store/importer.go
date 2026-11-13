@@ -115,6 +115,15 @@ func (s *Store) Import(spec *ImportSpec) (*ImportResult, error) {
 		}
 		lessonIDs := map[key]int64{}
 		for _, lesson := range spec.Lessons {
+			if _, err := cleanDate(lesson.Date); err != nil {
+				return fmt.Errorf("lesson %q: bad date", lesson.Date)
+			}
+			if lesson.Number != 1 && lesson.Number != 2 {
+				return fmt.Errorf("lesson %s: number must be 1 or 2, got %d", lesson.Date, lesson.Number)
+			}
+			if _, dup := lessonIDs[key{lesson.Date, lesson.Number}]; dup {
+				return fmt.Errorf("lesson %s para %d appears twice", lesson.Date, lesson.Number)
+			}
 			base, err := ts(lesson.Date, "12:00")
 			if err != nil {
 				return err

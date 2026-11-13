@@ -1,8 +1,10 @@
 package auth
 
 import (
+	"encoding/hex"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -88,12 +90,12 @@ func TestCreateAndLoadRoundTrip(t *testing.T) {
 func TestLockout(t *testing.T) {
 	a := pythonAuth(t)
 	for i := 0; i < maxFailures-1; i++ {
-		a.Fail("1.2.3.4")
+		a.Attempt("1.2.3.4")
 	}
 	if a.Locked("1.2.3.4") {
 		t.Fatal("locked too early")
 	}
-	a.Fail("1.2.3.4")
+	a.Attempt("1.2.3.4")
 	if !a.Locked("1.2.3.4") {
 		t.Fatal("not locked after 5 failures")
 	}
@@ -109,7 +111,7 @@ func TestLockout(t *testing.T) {
 func TestFailuresOfAddressesThatNeverReturnArePruned(t *testing.T) {
 	a := pythonAuth(t)
 	for i := range 1000 {
-		a.Fail("10.0." + string(rune('a'+i%26)) + string(rune('a'+i/26)))
+		a.Attempt("10.0." + string(rune('a'+i%26)) + string(rune('a'+i/26)))
 	}
 	old := time.Now().Add(-2 * lockSeconds * time.Second)
 	a.mu.Lock()
@@ -139,4 +141,63 @@ func TestHashSlotsAreLimited(t *testing.T) {
 		t.Fatal("a released slot is not free again")
 	}
 	r2()
+}
+
+func TestRotateEndsEverySession(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "auth.json")
+	if err := Create(path, "parol-123"); err != nil {
+		t.Fatal(err)
+	}
+	a, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := a.NewSession()
+	if err := a.Rotate(); err != nil {
+		t.Fatal(err)
+	}
+	if a.ValidSession(old) {
+		t.Fatal("a session from before the rotation still works")
+	}
+	if !a.ValidSession(a.NewSession()) || !a.CheckPassword("parol-123") {
+		t.Fatal("new sessions and the password must still work")
+	}
+	again, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.ValidSession(old) || !again.ValidSession(a.NewSession()) {
+		t.Fatal("the new secret was not saved")
+	}
+}
+
+func TestRedactedCopyHasNoSecretAndStillLoads(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "auth.json")
+	if err := Create(path, "parol-123"); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := Load(path)
+	raw, err := Redacted(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "secret") || strings.Contains(string(raw), hex.EncodeToString(a.secret)) {
+		t.Fatalf("the copy carries the secret: %s", raw)
+	}
+	restored := filepath.Join(dir, "restored.json")
+	os.WriteFile(restored, raw, 0o600)
+	b, err := Load(restored)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !b.CheckPassword("parol-123") {
+		t.Fatal("the restored copy lost the password")
+	}
+	if b.ValidSession(a.NewSession()) {
+		t.Fatal("a session signed before the backup must not work after a restore")
+	}
+	if c, _ := Load(restored); !c.ValidSession(b.NewSession()) {
+		t.Fatal("the new secret was not written back")
+	}
 }

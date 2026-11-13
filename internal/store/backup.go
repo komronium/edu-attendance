@@ -53,6 +53,10 @@ func Backup(src, dir string, keep int) (string, error) {
 	if err := os.Chmod(path, 0o600); err != nil {
 		return "", err
 	}
+	if err := verify(path); err != nil {
+		os.Remove(path)
+		return "", fmt.Errorf("backup %s: %w", path, err)
+	}
 	if keep > 0 {
 		if err := Prune(dir, BackupPrefix, BackupExt, keep); err != nil {
 			return path, err
@@ -61,12 +65,26 @@ func Backup(src, dir string, keep int) (string, error) {
 	return path, nil
 }
 
-// CopyFile copies a small file (auth.json) into dir under prefix+stamp+ext, mode 0600.
-func CopyFile(src, dir, prefix, ext string) (string, error) {
-	raw, err := os.ReadFile(src)
+// verify opens a finished copy read-only and runs SQLite's integrity check on it, so a copy that would
+// not restore is reported now rather than found out on the day it is needed.
+func verify(path string) error {
+	db, err := sql.Open("sqlite", "file:"+path+"?mode=ro")
 	if err != nil {
-		return "", err
+		return err
 	}
+	defer db.Close()
+	var result string
+	if err := db.QueryRow("pragma integrity_check").Scan(&result); err != nil {
+		return err
+	}
+	if result != "ok" {
+		return fmt.Errorf("integrity check: %s", result)
+	}
+	return nil
+}
+
+// WriteCopy writes a small file (the redacted auth.json) into dir under prefix+stamp+ext, mode 0600.
+func WriteCopy(raw []byte, dir, prefix, ext string) (string, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}

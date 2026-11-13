@@ -137,9 +137,13 @@ func TestLoginFlow(t *testing.T) {
 	if res, body := e.do("GET", "/", "", "Cookie", e.cookie); res.StatusCode != 200 || body != "<h1>index</h1>" {
 		t.Fatalf("index: %d %q", res.StatusCode, body)
 	}
-	res, _ = e.do("GET", "/logout", "")
+	other := e.cookie // the same login in another browser, or a copied cookie
+	res, _ = e.do("GET", "/logout", "", "Cookie", e.cookie)
 	if res.StatusCode != 303 || !strings.Contains(res.Header.Get("Set-Cookie"), "Max-Age=0") {
 		t.Fatalf("logout must clear the cookie: %v", res.Header)
+	}
+	if res, _ := e.do("GET", "/api/students", "", "Cookie", other); res.StatusCode != 401 {
+		t.Fatalf("after logout every session must end, got %d", res.StatusCode)
 	}
 }
 

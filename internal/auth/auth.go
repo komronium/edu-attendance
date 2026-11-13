@@ -12,6 +12,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -40,9 +41,10 @@ type record struct {
 
 // Auth holds the password hash, the cookie signing secret and the failed-login counters.
 type Auth struct {
+	keyMu  sync.RWMutex // guards rec and secret: Upgrade and Rotate replace them while requests read them
 	rec    record
 	secret []byte
-	path   string        // auth.json, for re-hashing at a higher cost
+	path   string        // auth.json, for re-hashing at a higher cost and for a new secret
 	hashes chan struct{} // a slot per password check that may run
 
 	// NoLogin accepts every request (the demo's screenshot mode).
@@ -60,7 +62,8 @@ func hashPassword(password string, salt []byte, iterations int) (string, error) 
 	return hex.EncodeToString(key), nil
 }
 
-// Load reads auth.json.
+// Load reads auth.json. A file without a secret (a restored backup: Redacted leaves it out) gets a new
+// one, written back when the file is writable; no old session is valid with it.
 func Load(path string) (*Auth, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -71,8 +74,17 @@ func Load(path string) (*Auth, error) {
 		return nil, err
 	}
 	secret, err := hex.DecodeString(rec.Secret)
-	if err != nil || len(secret) == 0 || rec.Salt == "" || rec.Hash == "" || rec.Iterations <= 0 {
+	if err != nil || rec.Salt == "" || rec.Hash == "" || rec.Iterations <= 0 {
 		return nil, errors.New("auth: bad auth.json")
+	}
+	if len(secret) == 0 {
+		if secret, err = newSecret(); err != nil {
+			return nil, err
+		}
+		rec.Secret = hex.EncodeToString(secret)
+		if err := writeRecord(path, rec); err != nil {
+			slog.Warn("auth: new session secret kept in memory only", "err", err)
+		}
 	}
 	return &Auth{rec: rec, secret: secret, path: path, hashes: make(chan struct{}, maxHashing), failures: map[string][]time.Time{}}, nil
 }
@@ -80,11 +92,32 @@ func Load(path string) (*Auth, error) {
 // Create writes a new auth.json (mode 0600) for the password, replacing any existing one. A new
 // secret means every session signed with the old one ends.
 func Create(path, password string) error {
-	secret := make([]byte, 32)
-	if _, err := rand.Read(secret); err != nil {
+	secret, err := newSecret()
+	if err != nil {
 		return err
 	}
 	return write(path, password, secret)
+}
+
+func newSecret() ([]byte, error) {
+	secret := make([]byte, 32)
+	_, err := rand.Read(secret)
+	return secret, err
+}
+
+// Redacted is auth.json without the session secret, for a backup: a copy that leaks then holds only the
+// password hash, and cannot be used to sign a session cookie.
+func Redacted(path string) ([]byte, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var rec record
+	if err := json.Unmarshal(raw, &rec); err != nil {
+		return nil, err
+	}
+	rec.Secret = ""
+	return json.Marshal(rec)
 }
 
 func write(path, password string, secret []byte) error {
@@ -96,7 +129,11 @@ func write(path, password string, secret []byte) error {
 	if err != nil {
 		return err
 	}
-	data, err := json.Marshal(record{Salt: hex.EncodeToString(salt), Hash: hash, Iterations: Iterations, Secret: hex.EncodeToString(secret)})
+	return writeRecord(path, record{Salt: hex.EncodeToString(salt), Hash: hash, Iterations: Iterations, Secret: hex.EncodeToString(secret)})
+}
+
+func writeRecord(path string, rec record) error {
+	data, err := json.Marshal(rec)
 	if err != nil {
 		return err
 	}
@@ -112,15 +149,18 @@ func write(path, password string, secret []byte) error {
 
 // CheckPassword compares the password against the stored hash in constant time.
 func (a *Auth) CheckPassword(password string) bool {
-	salt, err := hex.DecodeString(a.rec.Salt)
+	a.keyMu.RLock()
+	rec := a.rec
+	a.keyMu.RUnlock()
+	salt, err := hex.DecodeString(rec.Salt)
 	if err != nil {
 		return false
 	}
-	got, err := hashPassword(password, salt, a.rec.Iterations)
+	got, err := hashPassword(password, salt, rec.Iterations)
 	if err != nil {
 		return false
 	}
-	return subtle.ConstantTimeCompare([]byte(got), []byte(a.rec.Hash)) == 1
+	return subtle.ConstantTimeCompare([]byte(got), []byte(rec.Hash)) == 1
 }
 
 // prune drops attempts older than the lock window, for every address, so the map cannot grow without
@@ -164,12 +204,6 @@ func (a *Auth) Attempt(ip string) bool {
 	return true
 }
 
-func (a *Auth) Fail(ip string) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.failures[ip] = append(a.failures[ip], time.Now())
-}
-
 // TryHash takes one of the few slots for a password check; ok is false when all are busy. The caller
 // must call release when done.
 func (a *Auth) TryHash() (release func(), ok bool) {
@@ -184,8 +218,8 @@ func (a *Auth) TryHash() (release func(), ok bool) {
 // Upgrade rewrites auth.json at the current cost when the stored hash is cheaper, keeping the secret
 // so no session ends. password must be the one that just matched.
 func (a *Auth) Upgrade(password string) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
+	a.keyMu.Lock()
+	defer a.keyMu.Unlock()
 	if a.rec.Iterations >= Iterations || a.path == "" {
 		return nil
 	}
@@ -200,6 +234,26 @@ func (a *Auth) Upgrade(password string) error {
 	return nil
 }
 
+// Rotate replaces the session secret, which ends every session at once: on logout, a cookie copied
+// from this browser (or from any other) stops working too. The password does not change.
+func (a *Auth) Rotate() error {
+	secret, err := newSecret()
+	if err != nil {
+		return err
+	}
+	a.keyMu.Lock()
+	defer a.keyMu.Unlock()
+	rec := a.rec
+	rec.Secret = hex.EncodeToString(secret)
+	if a.path != "" {
+		if err := writeRecord(a.path, rec); err != nil {
+			return err
+		}
+	}
+	a.rec, a.secret = rec, secret
+	return nil
+}
+
 func (a *Auth) Succeed(ip string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -207,7 +261,10 @@ func (a *Auth) Succeed(ip string) {
 }
 
 func (a *Auth) sign(payload string) string {
-	mac := hmac.New(sha256.New, a.secret)
+	a.keyMu.RLock()
+	secret := a.secret
+	a.keyMu.RUnlock()
+	mac := hmac.New(sha256.New, secret)
 	mac.Write([]byte(payload))
 	return hex.EncodeToString(mac.Sum(nil))
 }

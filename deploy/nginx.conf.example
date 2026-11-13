@@ -13,7 +13,8 @@ server {
 
     client_max_body_size 256k;            # the app refuses JSON bodies over 200 KB anyway
 
-    location = /login {
+    # both take the password: the form, and the page's own re-login when a session ends while it is open
+    location ~ ^/(api/)?login$ {
         limit_req zone=attendance_login burst=5 nodelay;   # password guessing, per address
         limit_req_status 429;
         include /etc/nginx/attendance-proxy.conf;

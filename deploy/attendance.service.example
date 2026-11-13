@@ -25,6 +25,27 @@ NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
+# extra sandboxing for a static Go binary that only needs the network and its data directory;
+# not yet tried on the live server: after installing, check `systemctl status` and the journal
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged
+SystemCallErrorNumber=EPERM
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryMax=512M
 
 [Install]
 WantedBy=multi-user.target

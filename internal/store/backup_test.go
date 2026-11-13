@@ -149,3 +149,27 @@ func TestOpenBacksUpBeforeAddingAColumn(t *testing.T) {
 		t.Fatal("the database file is not 0600")
 	}
 }
+
+func TestBackupRefusesACorruptSource(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "attendance.sqlite3")
+	s := must(Open(path))
+	if _, err := s.AddStudents([]any{"Aliyev Ali"}); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	raw := must(os.ReadFile(path))
+	if len(raw) < 8192 {
+		t.Skip("database too small to damage a page")
+	}
+	for i := 4096; i < 8192; i++ { // the second page: a table b-tree page, not the header
+		raw[i] = 0xff
+	}
+	os.WriteFile(path, raw, 0o600)
+	dir := filepath.Join(t.TempDir(), "b")
+	if _, err := Backup(path, dir, 0); err == nil {
+		t.Fatal("a damaged database was backed up without an error")
+	}
+	if left := must(Backups(dir, BackupPrefix, BackupExt)); len(left) != 0 {
+		t.Fatalf("a failed backup left a file: %v", left)
+	}
+}

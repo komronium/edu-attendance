@@ -20,7 +20,10 @@ Light, dark or automatic theme is chosen in the sidebar.
     ./bin/attendance set-password --generate --data ./data
     ./bin/attendance run --data ./data
 
-Commands: `run` (default), `set-password`, `demo`, `import FILE --yes`, `backup`. Run `attendance help` for the flags.
+Commands: `run` (default), `set-password`, `demo`, `import FILE --yes`, `backup`, `version`. Run `attendance help` for the flags.
+
+Logging out ("Chiqish") ends every session, not only this browser's: the cookie-signing secret is replaced,
+so a cookie copied elsewhere stops working too. Any other open tab asks for the password again.
 
 Environment (each has a matching flag): `ATTENDANCE_DATA` (default `/var/lib/attendance`),
 `ATTENDANCE_BIND` (default `127.0.0.1`), `ATTENDANCE_PORT` (default `8766`),
@@ -90,14 +93,17 @@ Stop the old service before starting the new one: both must not write the same d
 
 Live at https://davomat.lidersement.uz: `attendance.service` runs `/opt/attendance/attendance` on
 127.0.0.1:8766 behind nginx, with its data in `/var/lib/davomat`. To update, run `make linux`, copy the
-binary over, run `attendance backup` with it, and restart the service. Never copy a laptop database over it.
+binary over (keep the previous one as `attendance.prev`), run `attendance backup` with it, and restart the
+service. `attendance version` prints the commit it was built from, and the start-up log line names it too.
+To roll back, put `attendance.prev` back and restart; a version that added a column made a backup first
+(see below). Never copy a laptop database over it.
 
 `deploy/` holds example nginx and systemd files. Check the live ones against them:
 
 1. nginx overwrites `X-Real-IP` with `$remote_addr` (the login lockout counts per that address). Live: yes.
 2. nginx sets `X-Forwarded-Proto $scheme`, or the unit sets `ATTENDANCE_SECURE_COOKIE=1` (or both). Live: both.
 3. nginx `proxy_read_timeout` is at least 90s (a manual sync is allowed 70 s; real ones took 14-19 s on 2026-11-12). Live: not set (60 s default).
-4. nginx limits `/login` (`limit_req`) and sends HSTS. Live: neither.
+4. nginx limits `/login` and `/api/login` (`limit_req`) and sends HSTS. Live: neither.
 5. the unit sets `UMask=0077`; the data directory is owned by the service user only. Live: no UMask; the files are 0644, but the directory above is root-only (0700), so nobody else can reach them.
 6. the backup timer is enabled, and the copies are also kept somewhere other than the server. Live: there is no backup of this database at all.
 
@@ -106,15 +112,18 @@ binary over, run `attendance backup` with it, and restart the service. Never cop
     attendance backup --data /var/lib/davomat            # -> /var/lib/davomat/backups/attendance-*.sqlite3
     attendance backup --data /var/lib/davomat --to DIR --keep 10
 
-A backup is a consistent copy taken through SQLite (`VACUUM INTO`), safe while the service runs, together
-with `auth.json`; files are 0600 and the newest 30 are kept by default. Do not copy `attendance.sqlite3` by
+A backup is a consistent copy taken through SQLite (`VACUUM INTO`), safe while the service runs, checked
+with SQLite's integrity check before it counts, together with `auth.json`; files are 0600 and the newest 30
+are kept by default. The `auth.json` copy holds the password hash but not the session secret, so a copy that
+leaks cannot be used to sign a login cookie. Do not copy `attendance.sqlite3` by
 hand while the service runs: the latest changes may still be in the `-wal` file next to it. Copies are also
 made automatically before `import` and before a new version adds a column to the database.
 `deploy/attendance-backup.timer.example` runs it daily.
 
 To restore: stop the service, move `attendance.sqlite3`, `attendance.sqlite3-wal` and
 `attendance.sqlite3-shm` aside, copy the chosen backup to `attendance.sqlite3` (owner only, `chmod 600`),
-start the service.
+start the service. To restore the password as well, copy the matching `auth-*.json` to `auth.json`: the
+service makes a new session secret on start, so everyone logs in once more.
 
 Production data (the sqlite db and `auth.json`) is intentionally NOT in this repo.
 

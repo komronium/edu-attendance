@@ -32,6 +32,9 @@ import (
 //go:embed web
 var webFiles embed.FS
 
+// version is set at build time (make build / make linux: the git commit); "dev" otherwise.
+var version = "dev"
+
 const usage = `usage: attendance [command] [flags]
 
 commands:
@@ -41,6 +44,7 @@ commands:
   import FILE   replace lessons/attendance/retakes with a JSON spec (stop the service first;
                 takes a backup, and needs --yes to go ahead)
   backup        write a consistent copy of the database and auth.json (safe while the service runs)
+  version       print the build version
 
 flags (all commands):
   --data DIR    data directory (env ATTENDANCE_DATA, default /var/lib/attendance)
@@ -77,6 +81,10 @@ func main() {
 	}
 	if command == "help" {
 		fmt.Println(usage)
+		return
+	}
+	if command == "version" {
+		fmt.Println(version)
 		return
 	}
 	flags := flag.NewFlagSet("attendance", flag.ExitOnError)
@@ -180,7 +188,12 @@ func backup(dataDir, dir string, keep int) ([]string, error) {
 	}
 	out := []string{path}
 	if _, err := os.Stat(filepath.Join(dataDir, "auth.json")); err == nil {
-		a, err := store.CopyFile(filepath.Join(dataDir, "auth.json"), dir, "auth-", ".json")
+		// without the session secret: a leaked copy cannot sign a login cookie (see auth.Redacted)
+		raw, err := auth.Redacted(filepath.Join(dataDir, "auth.json"))
+		if err != nil {
+			return out, err
+		}
+		a, err := store.WriteCopy(raw, dir, "auth-", ".json")
 		if err != nil {
 			return out, err
 		}
@@ -290,11 +303,12 @@ func serve(demo bool, opt options) error {
 	if demo {
 		fmt.Printf("demo: http://%s/   password: demo\n", srv.Addr)
 	}
-	slog.Info("attendance listening", "addr", srv.Addr)
+	slog.Info("attendance listening", "addr", srv.Addr, "version", version)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	go handler.Syncer().Run(ctx)
+	go purgeDaily(ctx, db)
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(ln) }()
 	select {
@@ -305,6 +319,22 @@ func serve(demo bool, opt options) error {
 	shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return srv.Shutdown(shutdown)
+}
+
+// purgeDaily removes lessons past their 30 days in the bin once a day; Open does it at start too.
+func purgeDaily(ctx context.Context, db *store.Store) {
+	tick := time.NewTicker(24 * time.Hour)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			if err := db.PurgeDeleted(); err != nil {
+				slog.Error("purge deleted lessons", "err", err)
+			}
+		}
+	}
 }
 
 // isLoopback reports whether the listen address only accepts local connections.

@@ -1,10 +1,13 @@
 .PHONY: build linux test e2e demo run clean
 
+# the commit the binary was built from, "-dirty" when the tree had changes; `attendance version` prints it
+VERSION := $(shell git describe --always --dirty 2>/dev/null || echo dev)
+
 build:
-	go build -o bin/attendance .
+	go build -ldflags="-X main.version=$(VERSION)" -o bin/attendance .
 
 linux:
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o bin/attendance-linux-amd64 .
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=$(VERSION)" -o bin/attendance-linux-amd64 .
 
 test:
 	go vet ./...
