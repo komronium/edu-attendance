@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Runs everything CI runs (`make check`) before a push; the push is refused if anything fails.
+# GitHub Actions does not run for this private repo, so this is the CI. Installed by `make hooks`.
+# Skip once with `git push --no-verify` (e.g. a docs-only push while offline).
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+# only what is being pushed counts: refuse when there are uncommitted changes to tracked files
+if ! git diff --quiet || ! git diff --cached --quiet; then
+	echo "pre-push: uncommitted changes; commit or stash them so the checks test what is pushed" >&2
+	exit 1
+fi
+
+# a push that only deletes a branch has nothing to check
+while read -r _ local_sha _ _; do
+	if [ "$local_sha" != 0000000000000000000000000000000000000000 ]; then
+		exec make check
+	fi
+done

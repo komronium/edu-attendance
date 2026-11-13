@@ -79,9 +79,16 @@ move to the next lesson of the same subject and group. Each subject can have a s
 ## Build and test
 
     make test       # go vet, go test -race, node --test (pure logic in web/lib and web/pace.js)
+    make vuln       # govulncheck: known vulnerabilities in the code that is called
     make e2e        # headless Chrome against the demo: every page, both themes, several widths, key flows
+    make check      # all three: what CI checks
     make build      # ./bin/attendance
     make linux      # ./bin/attendance-linux-amd64, for the VPS (no cgo, no runtime needed)
+
+CI runs on this machine: GitHub Actions does not run for this private repo, so `make check` runs before
+every `git push` and a failure stops the push. Turn the hook on once per clone with `make hooks`; skip it
+for one push with `git push --no-verify`. The workflow in `.github/workflows/test.yml` runs the same
+`make check`, by hand only (Actions tab), for the day Actions is available.
 
 ## Deploy
 
