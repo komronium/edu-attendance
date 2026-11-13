@@ -18,8 +18,8 @@ NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-# extra sandboxing for a static Go binary that only needs the network and its data directory;
-# not yet tried on the live server: after installing, check `systemctl status` and the journal
+# extra sandboxing for a static Go binary that only needs the network and its data directory
+# (live since 2026-11-13)
 PrivateDevices=yes
 ProtectKernelTunables=yes
 ProtectKernelModules=yes

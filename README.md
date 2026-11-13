@@ -107,10 +107,10 @@ machine, the off-server copy.
 
 1. nginx overwrites `X-Real-IP` with `$remote_addr` (the login lockout counts per that address). Live: yes.
 2. nginx sets `X-Forwarded-Proto $scheme`, or the unit sets `ATTENDANCE_SECURE_COOKIE=1` (or both). Live: both.
-3. nginx `proxy_read_timeout` is at least 90s (a manual sync is allowed 70 s; real ones took 14-19 s on 2026-11-12). Live: not set (60 s default).
-4. nginx limits `/login` and `/api/login` (`limit_req`) and sends HSTS. Live: neither.
+3. nginx `proxy_read_timeout` is at least 90s (a manual sync is allowed 70 s; real ones took 14-19 s on 2026-11-12). Live (2026-11-13): 90s.
+4. nginx limits `/login` and `/api/login` (`limit_req`) and sends HSTS. Live (2026-11-13): both.
 5. the unit sets `UMask=0077`; the data directory is owned by the service user only. Live (2026-11-13): yes, through the drop-in `attendance.service.d/umask.conf`; the files are 0600.
-6. the backup timer is enabled, and the copies are also kept somewhere other than the server. Live (2026-11-13): the timer runs daily at about 03:30 UTC; no off-server copy yet (`scripts/pull-backups.sh`).
+6. the backup timer is enabled, and the copies are also kept somewhere other than the server. Live (2026-11-13): the timer runs daily at about 03:30 UTC, under the hardened unit; `scripts/pull-backups.sh` copies them to the laptop (first run 2026-11-13).
 
 The VPS also serves other sites through the same nginx: check any change with `nginx -t` before `systemctl reload nginx`.
 

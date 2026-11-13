@@ -96,7 +96,7 @@ say "data directory"
 ls -l /var/lib/private/davomat
 
 say "5. live nginx site (for the next step; nothing was changed)"
-for f in $(grep -rlE 'davomat|8766' /etc/nginx/sites-enabled /etc/nginx/conf.d /etc/nginx/*.conf 2>/dev/null); do
+for f in $(grep -RlE 'davomat|8766' /etc/nginx/sites-enabled /etc/nginx/conf.d /etc/nginx/*.conf 2>/dev/null); do
 	echo "---- $f"
 	cat "$f"
 done
