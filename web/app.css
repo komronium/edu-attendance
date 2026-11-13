@@ -6,7 +6,8 @@
    >= 3:1 in both themes. Blue is for the primary action, links and selection, red only for what needs action. */
 :root {
   color-scheme: light dark;
-  --bg: #f4f6f8; --surface: #ffffff; --surface-2: #eef2f5; --surface-3: #f8fafb; --line: #e2e8ee; --control: #7d8d9f;
+  --bg: #f4f6f8; --surface: #ffffff; --surface-2: #eef2f5; --surface-3: #f8fafb; --line: #e2e8ee; --line-strong: #cbd5de; --control: #7d8d9f;
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234a5d6e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   --text: #0f2233; --muted: #4a5d6e;
   --accent: #1f5fbf; --accent-text: #ffffff; --accent-soft: #eaf1fb; --accent-hover: #194e9e;
   --ink: #1f5fbf; --ink-text: #ffffff; --select: rgb(15 34 51 / .06); --ring: rgb(59 130 246 / .32);
@@ -21,7 +22,7 @@
   --r-lg: 12px; --r-md: 8px; --r-sm: 6px; --r-xs: 4px; --r-dialog: 16px; --r-full: 999px; --pad: 24px;
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px;
   --t-xs: .75rem; --t-sm: .8125rem; --t-md: .9375rem; --t-lg: 1.0625rem; --t-xl: 1.5rem;
-  --t-stat: 1.375rem; --t-stat-lg: 2.5rem; --t-hero: 3.5rem;
+  --t-stat: 1.75rem; --t-stat-lg: 2.5rem; --t-hero: 3.5rem;
   --font: "Public Sans", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
   --sidebar: 236px; --rail: 340px;
   --ease-out: cubic-bezier(.2, .8, .2, 1);
@@ -30,7 +31,8 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0b1620; --surface: #12202d; --surface-2: #1d3144; --surface-3: #172838; --line: #24384a; --control: #5c7790;
+    --bg: #0b1620; --surface: #12202d; --surface-2: #1d3144; --surface-3: #172838; --line: #24384a; --line-strong: #34506a; --control: #5c7790;
+    --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a9b8c6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
     --text: #e8eef4; --muted: #a9b8c6;
     --accent: #6ba6f5; --accent-text: #08121c; --accent-soft: #17304d; --accent-hover: #8dbbf8;
     --ink: #6ba6f5; --ink-text: #08121c; --select: rgb(255 255 255 / .07); --ring: rgb(107 166 245 / .35);
@@ -45,7 +47,8 @@
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-    --bg: #0b1620; --surface: #12202d; --surface-2: #1d3144; --surface-3: #172838; --line: #24384a; --control: #5c7790;
+    --bg: #0b1620; --surface: #12202d; --surface-2: #1d3144; --surface-3: #172838; --line: #24384a; --line-strong: #34506a; --control: #5c7790;
+    --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a9b8c6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
     --text: #e8eef4; --muted: #a9b8c6;
     --accent: #6ba6f5; --accent-text: #08121c; --accent-soft: #17304d; --accent-hover: #8dbbf8;
     --ink: #6ba6f5; --ink-text: #08121c; --select: rgb(255 255 255 / .07); --ring: rgb(107 166 245 / .35);
@@ -73,7 +76,7 @@ td, .pick, .work-main b, .papers b, dialog h2, dialog p, .absent-list li, #palet
 ::selection { background: var(--accent); color: var(--accent-text); }
 h1, h2, p { margin: 0; }
 h1 { font-size: var(--t-xl); line-height: 1.2; font-weight: 800; letter-spacing: -.02em; }
-h2 { font-size: var(--t-lg); font-weight: 600; letter-spacing: -.01em; }
+h2 { font-size: var(--t-lg); font-weight: 700; letter-spacing: -.01em; }
 .muted { color: var(--muted); }
 .strong { font-weight: 600; color: var(--text); }
 .nowrap { white-space: nowrap; }
@@ -89,10 +92,13 @@ input, select, textarea { width: 100%; }
 input:hover, select:hover, textarea:hover { border-color: var(--text); }
 input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 0; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
 input::placeholder, textarea::placeholder { color: var(--muted); }
+select { appearance: none; padding-right: 36px; background: var(--surface) var(--chevron) no-repeat right 10px center / 16px; cursor: pointer; }
+input, select, textarea { transition: border-color .15s var(--ease-out), box-shadow .15s var(--ease-out); }
 textarea { resize: vertical; line-height: 1.5; }
 button, .button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; font-weight: 600; white-space: nowrap; transition: background-color .12s, border-color .12s, color .12s, transform .12s var(--ease-out); }
 button:active:not(:disabled), .button:active { transform: scale(.98); }
-button:hover, .button:hover { background: var(--surface-2); text-decoration: none; }
+button, .button { border-color: var(--line-strong); }
+button:hover, .button:hover { background: var(--surface-2); border-color: var(--control); text-decoration: none; }
 button:disabled { opacity: .55; cursor: default; }
 button.primary, .button.primary { background: var(--ink); border-color: var(--ink); color: var(--ink-text); }
 button.primary:hover, .button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
@@ -112,7 +118,7 @@ button.gap { margin-top: var(--s2); }
 .date-native { position: absolute; right: 0; bottom: 0; width: 1px; min-height: 0; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none; }
 .date-pick { position: absolute; top: 2px; right: 2px; bottom: 2px; display: grid; place-items: center; width: 34px; min-height: 0; padding: 0; border: 0; color: var(--muted); background: none; }
 .date-pick:hover { color: var(--accent); background: none; }
-.field > span { color: var(--muted); font-size: var(--t-sm); font-weight: 500; }
+.field > span { color: var(--muted); font-size: var(--t-sm); font-weight: 600; }
 .stack { display: grid; gap: var(--s3); align-content: start; min-width: 0; }
 .pair { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: var(--s2); }
 .pair input, .pair select { padding-inline: var(--s2); }
@@ -123,7 +129,7 @@ button.gap { margin-top: var(--s2); }
   /* the navy sidebar re-points the shared tokens, so every control inside it (search, theme switch,
      sync note, badges) takes its colours without rules of its own */
   --text: var(--nav-text); --muted: var(--nav-muted); --select: var(--nav-hover); --surface: var(--nav-active);
-  --surface-2: var(--nav-hover); --line: rgb(255 255 255 / .1); --control: #4d6a85; --accent: var(--nav-accent); --ring: rgb(125 179 247 / .4);
+  --surface-2: var(--nav-hover); --line: rgb(255 255 255 / .1); --line-strong: rgb(255 255 255 / .16); --control: #4d6a85; --accent: var(--nav-accent); --ring: rgb(125 179 247 / .4);
   --bad: #f59e8b; --bad-soft: rgb(245 158 139 / .16); --shadow: none; --shadow-raise: none;
   scrollbar-color: var(--nav-active) transparent; }
 .sidebar :focus-visible { outline-color: var(--nav-accent); }
@@ -623,11 +629,11 @@ ul.history { display: grid; gap: var(--s2); margin-top: var(--s3); }
 
 /* ------------------------------------------------------------ loading */
 .skeleton { display: grid; gap: var(--s3); }
-.skeleton i { display: block; border-radius: var(--r-md); background: var(--surface-2); animation: pulse 1.2s ease-in-out infinite; }
+.skeleton i { display: block; border-radius: var(--r-sm); background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 37%, var(--surface-2) 63%) 0 0 / 400% 100%; animation: shimmer 1.4s ease infinite; }
+@keyframes shimmer { from { background-position: 100% 50%; } to { background-position: 0 50%; } }
 .s-title { width: 220px; height: 30px; } .s-sub { width: 140px; height: 16px; }
 .s-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s3); margin-top: var(--s3); } .s-row i { height: 84px; }
 .s-block { height: 320px; }
-@keyframes pulse { 50% { opacity: .55; } }
 
 /* ------------------------------------------------------------ search + theme */
 .side-search { width: 100%; justify-content: flex-start; gap: var(--s2); min-height: 34px; padding: 4px 10px; border-color: transparent; background: var(--select); color: var(--muted); font-weight: 500; }

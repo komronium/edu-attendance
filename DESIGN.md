@@ -16,7 +16,7 @@ Tokens live at the top of `web/app.css`, for light and dark.
 |---|---|---|---|
 | `--bg` | #f4f6f8 | #0b1620 | page ground |
 | `--surface` / `--surface-2` / `--surface-3` | #ffffff / #eef2f5 / #f8fafb | #12202d / #1d3144 / #172838 | cards; hovers, tracks, segmented controls; table header band |
-| `--line` / `--control` | #e2e8ee / #7d8d9f | #24384a / #5c7790 | hairlines; control borders (3:1 or better) |
+| `--line` / `--line-strong` / `--control` | #e2e8ee / #cbd5de / #7d8d9f | #24384a / #34506a / #5c7790 | hairlines; button borders (the label names a button); input and select borders (3:1 or better) |
 | `--side` | #0c2136 | #081019 | sidebar, always navy (`--nav-*` for its text, hover, current page, accent) |
 | `--text` / `--muted` | #0f2233 / #4a5d6e | #e8eef4 / #a9b8c6 | text |
 | `--ink` = `--accent` | #1f5fbf | #6ba6f5 | the one primary action, links, selection, meters |
@@ -32,7 +32,7 @@ Public Sans, owner's choice, tabular digits. Page title 24px extra-bold, -.02em;
 
 ## Shape and depth
 
-Cards: 12px radius, 24px padding, a 1px hairline (drawn as `--shadow`), no shadow. Dialogs: 16px radius, a deep shadow over a dark scrim. Controls: 8px radius, 1px border at 3:1 or better. Tables: hairlines; the header is a light band with 12px uppercase labels (not the timetable, whose header is the days). Sidebar: navy, grouped under small uppercase labels (Hisobot, Kurs · group, Tizim); the current page is a lighter navy row with a 3px blue bar at the left edge.
+Cards: 12px radius, 24px padding, a 1px hairline (drawn as `--shadow`), no shadow. Dialogs: 16px radius, a deep shadow over a dark scrim. Controls: 8px radius; inputs and selects a 1px border at 3:1 or better, buttons a lighter one that darkens on hover; selects draw their own chevron. Loading rows shimmer. Tables: hairlines; the header is a light band with 12px uppercase labels (not the timetable, whose header is the days). Sidebar: navy, grouped under small uppercase labels (Hisobot, Kurs · group, Tizim); the current page is a lighter navy row with a 3px blue bar at the left edge.
 
 ## Components
 
