@@ -5,8 +5,8 @@
 #   3. restarts the service and checks /healthz; on failure it puts the old binary and unit back
 #   4. installs (or updates) and enables the daily backup timer, and runs one backup through it as a test.
 #      Live units it replaces are kept in the rollback directory, with their diff printed.
-# A drop-in such as attendance.service.d/umask.conf is left as it is.
 #   5. prints the live nginx site, for the nginx changes (they are not made here)
+# A drop-in such as attendance.service.d/umask.conf is left as it is.
 set -euo pipefail
 
 stage=${STAGE:-/tmp/attendance-deploy}
