@@ -3,7 +3,9 @@
 #   1. backs up the live database with the new binary (read-only on the live file; safe while running)
 #   2. installs the new binary (the old one stays as attendance.prev) and the hardened systemd unit
 #   3. restarts the service and checks /healthz; on failure it puts the old binary and unit back
-#   4. installs and enables the daily backup timer, and runs one backup through it as a test
+#   4. installs (or updates) and enables the daily backup timer, and runs one backup through it as a test.
+#      Live units it replaces are kept in the rollback directory, with their diff printed.
+# A drop-in such as attendance.service.d/umask.conf is left as it is.
 #   5. prints the live nginx site, for the nginx changes (they are not made here)
 set -euo pipefail
 
@@ -67,7 +69,13 @@ healthy || rollback
 curl -fsS "$health"; echo
 journalctl -u attendance -n 3 --no-pager -o cat
 
-say "4. daily backup timer"
+say "4. daily backup timer (changes: live -> new)"
+for u in attendance-backup.service attendance-backup.timer; do
+	if [ -f "$units/$u" ]; then
+		cp -a "$units/$u" "$keep/$u"
+		diff -u "$units/$u" "$stage/$u.example" || true
+	fi
+done
 install -m 644 "$stage/attendance-backup.service.example" "$units/attendance-backup.service"
 install -m 644 "$stage/attendance-backup.timer.example" "$units/attendance-backup.timer"
 systemctl daemon-reload
