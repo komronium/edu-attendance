@@ -21,11 +21,15 @@ import (
 )
 
 const (
-	Iterations     = 240_000
-	SessionSeconds = 12 * 3600
+	SessionSeconds = 12 * 3600 // since the last request: an open tab renews its session (Renew)
 	maxFailures    = 5
 	lockSeconds    = 900
+	maxHashing     = 2 // password checks running at once; more get "too many requests"
 )
+
+// Iterations is the PBKDF2 cost of new hashes (OWASP's figure for SHA-256). A hash made with fewer is
+// still accepted and is rewritten at this cost after the next successful login.
+var Iterations = 600_000
 
 type record struct {
 	Salt       string `json:"salt"`
@@ -38,6 +42,8 @@ type record struct {
 type Auth struct {
 	rec    record
 	secret []byte
+	path   string        // auth.json, for re-hashing at a higher cost
+	hashes chan struct{} // a slot per password check that may run
 
 	// NoLogin accepts every request (the demo's screenshot mode).
 	NoLogin bool
@@ -68,17 +74,22 @@ func Load(path string) (*Auth, error) {
 	if err != nil || len(secret) == 0 || rec.Salt == "" || rec.Hash == "" || rec.Iterations <= 0 {
 		return nil, errors.New("auth: bad auth.json")
 	}
-	return &Auth{rec: rec, secret: secret, failures: map[string][]time.Time{}}, nil
+	return &Auth{rec: rec, secret: secret, path: path, hashes: make(chan struct{}, maxHashing), failures: map[string][]time.Time{}}, nil
 }
 
-// Create writes a new auth.json (mode 0600) for the password, replacing any existing one.
+// Create writes a new auth.json (mode 0600) for the password, replacing any existing one. A new
+// secret means every session signed with the old one ends.
 func Create(path, password string) error {
-	salt := make([]byte, 16)
 	secret := make([]byte, 32)
-	if _, err := rand.Read(salt); err != nil {
+	if _, err := rand.Read(secret); err != nil {
 		return err
 	}
-	if _, err := rand.Read(secret); err != nil {
+	return write(path, password, secret)
+}
+
+func write(path, password string, secret []byte) error {
+	salt := make([]byte, 16)
+	if _, err := rand.Read(salt); err != nil {
 		return err
 	}
 	hash, err := hashPassword(password, salt, Iterations)
@@ -112,29 +123,81 @@ func (a *Auth) CheckPassword(password string) bool {
 	return subtle.ConstantTimeCompare([]byte(got), []byte(a.rec.Hash)) == 1
 }
 
+// prune drops attempts older than the lock window, for every address, so the map cannot grow without
+// bound from addresses that never come back. a.mu must be held.
+func (a *Auth) prune() {
+	cutoff := time.Now().Add(-lockSeconds * time.Second)
+	for ip, list := range a.failures {
+		recent := list[:0]
+		for _, t := range list {
+			if t.After(cutoff) {
+				recent = append(recent, t)
+			}
+		}
+		if len(recent) == 0 {
+			delete(a.failures, ip)
+		} else {
+			a.failures[ip] = recent
+		}
+	}
+}
+
 // Locked reports whether the address has failed too many times recently.
 func (a *Auth) Locked(ip string) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	cutoff := time.Now().Add(-lockSeconds * time.Second)
-	recent := a.failures[ip][:0]
-	for _, t := range a.failures[ip] {
-		if t.After(cutoff) {
-			recent = append(recent, t)
-		}
+	a.prune()
+	return len(a.failures[ip]) >= maxFailures
+}
+
+// Attempt reports whether the address may try a password now, and if so counts the try at once,
+// before the slow check: requests sent in parallel cannot all slip under the limit. A successful
+// login clears the count (Succeed).
+func (a *Auth) Attempt(ip string) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.prune()
+	if len(a.failures[ip]) >= maxFailures {
+		return false
 	}
-	if len(recent) == 0 {
-		delete(a.failures, ip)
-	} else {
-		a.failures[ip] = recent
-	}
-	return len(recent) >= maxFailures
+	a.failures[ip] = append(a.failures[ip], time.Now())
+	return true
 }
 
 func (a *Auth) Fail(ip string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.failures[ip] = append(a.failures[ip], time.Now())
+}
+
+// TryHash takes one of the few slots for a password check; ok is false when all are busy. The caller
+// must call release when done.
+func (a *Auth) TryHash() (release func(), ok bool) {
+	select {
+	case a.hashes <- struct{}{}:
+		return func() { <-a.hashes }, true
+	default:
+		return nil, false
+	}
+}
+
+// Upgrade rewrites auth.json at the current cost when the stored hash is cheaper, keeping the secret
+// so no session ends. password must be the one that just matched.
+func (a *Auth) Upgrade(password string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.rec.Iterations >= Iterations || a.path == "" {
+		return nil
+	}
+	if err := write(a.path, password, a.secret); err != nil {
+		return err
+	}
+	fresh, err := Load(a.path)
+	if err != nil {
+		return err
+	}
+	a.rec = fresh.rec
+	return nil
 }
 
 func (a *Auth) Succeed(ip string) {
@@ -150,9 +213,26 @@ func (a *Auth) sign(payload string) string {
 }
 
 // NewSession returns a signed token valid for SessionSeconds.
-func (a *Auth) NewSession() string {
-	expires := strconv.FormatInt(time.Now().Unix()+SessionSeconds, 10)
+func (a *Auth) NewSession() string { return a.NewSessionAt(time.Now()) }
+
+// NewSessionAt is NewSession as if it were issued at t.
+func (a *Auth) NewSessionAt(t time.Time) string {
+	expires := strconv.FormatInt(t.Unix()+SessionSeconds, 10)
 	return expires + "." + a.sign(expires)
+}
+
+// Renew returns a fresh token for a valid one that is past half its lifetime, so a session in use does
+// not end; ok is false when the token is invalid or still fresh. The token format does not change.
+func (a *Auth) Renew(token string) (fresh string, ok bool) {
+	if a.NoLogin || !a.ValidSession(token) {
+		return "", false
+	}
+	expires, _, _ := strings.Cut(token, ".")
+	at, err := strconv.ParseInt(expires, 10, 64)
+	if err != nil || at-time.Now().Unix() > SessionSeconds/2 {
+		return "", false
+	}
+	return a.NewSession(), true
 }
 
 // ValidSession checks the signature and the expiry of a token.

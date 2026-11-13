@@ -1,18 +1,35 @@
 "use strict";
+// pure logic lives in web/lib (tested by node --test); the page binds it to today and the clock
+const { TZ, WEEKDAYS, MONTHS, PARA_TIMES, shiftDay, dowOf, weekday, longDay, shortDate, monthTitle, capital, inputDay, periodKey, periodTitle } = Dates;
+const { COURSE, HOURS_PER_PARA, canonSubject, fmtRoom, fmtType, isSirtqi, normTitle, sameWork, plainName, workSteps, defaultSteps, GRADED_BY_OTHERS, SKIPPED } = Rules;
+const { cancelKey, entriesFor, paraOver, courseGaps, nextEntry, entryInfo, sameClass, nextOfClass } = Timetable;
+const { PARA_SLACK, needPct, total, sessionWindows } = Load;
+const { ustamaFigure } = Ustama;
+const { planStage } = Plans;
+const { fmtNum, pct, hrs, h1, pct1, signed, noteLessons } = Format;
+function dayText(iso) { return Dates.dayText(iso, today()); }
+function relDay(iso) { return Dates.relDay(iso, today()); }
+function parseDay(text) { return Dates.parseDay(text, today()); }
+// this semester's debts only: an earlier semester's are kept, but are not what needs doing now
+const inSemesterNow = (iso) => !semesterNow.start || iso >= semesterNow.start;
+function thisSemester(r) {
+  const items = r.items.filter((x) => inSemesterNow(x.date)), retaken = items.filter((x) => x.retake_at).length;
+  return { ...r, items, missed: items.length, retaken, owed: items.length - retaken, older: r.items.length - items.length };
+}
+const lessonContext = (sessions, data, cancelled, semester = semesterNow) => Timetable.lessonContext(sessions, data, cancelled, semester);
+const computeLoad = (data, sessions, coursePlan, cancelled) => Load.computeLoad(data, sessions, coursePlan, cancelled, semesterNow, today(), nowTime());
+const loadPace = (data, sessions, coursePlan, cancelled, semester) => Load.loadPace(data, sessions, coursePlan, cancelled, semester, today(), nowTime());
+const ustamaOpen = (data, marks, month, progress) => Ustama.ustamaOpen(data, marks, month, progress, today());
+const planHeld = (p) => Plans.planHeld(p, today(), nowTime());
+const planTaught = (p) => Plans.planTaught(p, today(), nowTime());
+const coveredTopics = (info, sessions) => Plans.coveredTopics([...planCache.plans.values()], info, sessions, today(), nowTime());
+const suggestTopic = (info, sessions) => Plans.suggestTopic([...planCache.plans.values()], planCache.topics, info, sessions || planCache.sessions, today(), nowTime());
 
-const TZ = "Asia/Tashkent";
-const WEEKDAYS = ["yakshanba", "dushanba", "seshanba", "chorshanba", "payshanba", "juma", "shanba"];
-const MONTHS = ["yanvar", "fevral", "mart", "aprel", "may", "iyun", "iyul", "avgust", "sentabr", "oktabr", "noyabr", "dekabr"];
 const view = document.getElementById("view");
 const msgBox = document.getElementById("msg");
 const confirmBox = document.getElementById("confirm");
 const sheetBox = document.getElementById("sheet");
 
-// official lesson times of the university
-const PARA_TIMES = { 1: ["08:30", "09:50"], 2: ["10:00", "11:20"], 3: ["11:30", "12:50"], 4: ["13:20", "14:40"], 5: ["14:50", "16:10"], 6: ["16:20", "17:40"], 7: ["17:50", "19:10"], 8: ["19:20", "20:40"], 9: ["20:50", "22:10"] };
-// the course group's fixed classes: Monday-Thursday, timetable paras 3 and 4.
-// The lessons table stores them as para 1 and 2 of the day, so slotOf maps stored para -> timetable para.
-const COURSE = { subject: "Algoritmlash", type: "Amaliy", group: "2-ATT-25", planHours: 200 /* estimate: the group is not in the site's load */, days: [1, 2, 3, 4], slotOf: { 1: 3, 2: 4 }, room: "K4 / 309" };
 const SITE = "https://digital.oxu.uz";
 
 function h(tag, props, ...kids) {
@@ -61,26 +78,9 @@ function icon(name) {
 
 /* ------------------------------------------------------------ formatting */
 function today() { return new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date()); }
-function shiftDay(iso, days) { const [y, m, d] = iso.split("-").map(Number); return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10); }
-// one way to write a day everywhere it is read: "8-noyabr", with the year only when it is not this year
-function dayText(iso) {
-  const [y, m, d] = iso.split("-").map(Number);
-  return d + "-" + MONTHS[m - 1] + (String(y) === today().slice(0, 4) ? "" : " " + y);
-}
-// what a date box holds while it is typed in: "08.11.2026"
-function inputDay(iso) {
-  const [y, m, d] = iso.split("-").map(Number);
-  return String(d).padStart(2, "0") + "." + String(m).padStart(2, "0") + "." + y;
-}
-function weekday(iso) { const [y, m, d] = iso.split("-").map(Number); return WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]; }
-function longDay(iso) { const [, m, d] = iso.split("-").map(Number); return d + "-" + MONTHS[m - 1] + ", " + weekday(iso); }
-function monthTitle(key) { const [y, m] = key.split("-").map(Number); const t = MONTHS[m - 1]; return t[0].toUpperCase() + t.slice(1) + " " + y; }
-function relDay(iso) { const t = today(); return iso === t ? "bugun" : iso === shiftDay(t, -1) ? "kecha" : null; }
 function timeText(ts) { return new Intl.DateTimeFormat("en-GB", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(ts * 1000)); }
 function nowTime() { return timeText(Date.now() / 1000); }
-function fmtNum(v) { return String(Math.round(v * 100) / 100); }
 function paraText(p) { return p ? (COURSE.slotOf[p] || p) + "-para" : ""; }
-function pct(v) { return v === null || v === undefined ? "–" : (v === 100 ? "100" : v.toFixed(0)) + "%"; }
 // a course lesson's attendance: taken, still being taken, or left unfinished after the para ended
 const sessionEntry = (s) => ({ kind: "course", date: s.date, para: COURSE.slotOf[s.para] || s.para, appPara: s.para, session: s });
 function sessionChip(s) {
@@ -90,6 +90,24 @@ function span(s) { return s.finished_at ? timeText(s.started_at) + "–" + timeT
 function retakeText(x) { return dayText(x.retake_at) + (x.retake_time ? " " + x.retake_time : "") + (x.retake_room ? ", " + x.retake_room : ""); }
 
 /* ------------------------------------------------------------ small components */
+// How old the site's data on a page is. Nothing while it is under two hours old; a quiet line under a
+// day; a red one after that, when the session has most likely died. A sync that failed in part says so.
+const AGE_SOON = 2 * 3600, AGE_OLD = 24 * 3600;
+function ageLine(data, section, note) {
+  if (!data) return null;
+  const at = (data.fetched && data.fetched[section]) || 0, age = at ? Date.now() / 1000 - at : Infinity;
+  const partial = (data.warnings || []).map((w) => w.split(":")[0]);
+  if (age < AGE_SOON && !partial.length) return null;
+  const old = age >= AGE_OLD;
+  const text = !at ? "Bu ma'lumot hali o'qilmagan." : age < AGE_SOON ? "" : age < AGE_OLD ? "Ma'lumot " + Math.floor(age / 3600) + " soat oldingi."
+    : "Ma'lumot " + Math.floor(age / 86400) + " kun oldingi" + " (" + stamp(at) + ").";
+  return h("p", { class: "age-line" + (old ? " old" : ""), role: "status" }, icon(old ? "alert" : "clock"),
+    text ? h("span", { text: text + (old && note ? " " + note : "") }) : null,
+    partial.length ? h("span", { class: "muted", text: "Qisman yangilangan: " + partial.join(", ") + " o'qilmadi." }) : null,
+    h("a", { href: "#/kabinet", text: "Sinxronlash" }));
+}
+const withAge = (data, section, note, head) => [head, ageLine(data, section, note)];
+
 function chip(text, kind, iconName) { return h("span", { class: "chip" + (kind ? " " + kind : "") }, iconName ? icon(iconName) : null, text); }
 function meter(value) {          // value 0..100; a thin single-hue mark, the number is always printed next to it
   const fill = h("i");
@@ -101,17 +119,9 @@ function pageHead(title, sub, ...actions) {
   return h("header", { class: "page-head" }, h("div", {}, h("h1", { text: title }), sub ? h("p", { class: "sub" }, sub) : null), actions.length ? h("div", { class: "head-actions" }, actions) : null);
 }
 function back(href, text) { return h("a", { class: "back", href }, icon("back"), text); }
-// "5.11.2026", "05/11/2026" or "5.11" -> "2026-11-05"; anything that is not a real date -> ""
-function parseDay(text) {
-  const m = /^(\d{1,2})[./-](\d{1,2})(?:[./-](\d{4}))?$/.exec(text.trim());
-  if (!m) return "";
-  const d = Number(m[1]), mo = Number(m[2]), y = Number(m[3] || today().slice(0, 4)), real = new Date(Date.UTC(y, mo - 1, d));
-  if (real.getUTCMonth() !== mo - 1 || real.getUTCDate() !== d) return "";
-  return y + "-" + String(mo).padStart(2, "0") + "-" + String(d).padStart(2, "0");
-}
 // the browser draws type=date in its own locale, so people type dd.mm.yyyy and the calendar stays one click away
 function dateField(name, value) {
-  const native = h("input", { type: "date", name, value, class: "date-native", tabindex: "-1", "aria-hidden": "true" });
+  const native = h("input", { type: "date", name, value, class: "date-native", tabindex: "-1", "aria-hidden": "true", "aria-label": "Sana" });
   const text = h("input", { type: "text", inputmode: "numeric", value: inputDay(value), placeholder: "kk.oo.yyyy", maxlength: "10", autocomplete: "off", required: true });
   let sent = value;   // the date listeners last heard about; typing only tells them once the field is left
   const read = () => {
@@ -140,25 +150,72 @@ function linkRow(href, cells, cls) {   // a table row that opens a page; the fir
 }
 
 /* ------------------------------------------------------------ data */
-async function api(method, url, body) {
+// A session that ended while the page was open: one password prompt over the page, shared by every
+// request that found it so; what was being typed stays where it is. Resolves once logged in again.
+let relogin = null;
+function reloginPrompt() {
+  if (relogin) return relogin;
+  const box = document.getElementById("relogin"), form = box.querySelector("form"), input = form.elements.password, err = box.querySelector(".login-error");
+  relogin = new Promise((resolve) => {
+    err.textContent = ""; input.value = "";
+    const submit = async (e) => {
+      e.preventDefault();
+      let r = null;
+      try {
+        r = await fetch("/api/login", { method: "POST", headers: { "X-Requested-With": "attendance", "Content-Type": "application/json" }, body: JSON.stringify({ password: input.value }) });
+      } catch (x) { /* shown below */ }
+      if (r && r.ok) { form.removeEventListener("submit", submit); box.close(); relogin = null; resolve(); return; }
+      err.textContent = r ? ((await r.json().catch(() => ({}))).error || "Xato: " + r.status) : "Server bilan aloqa yo'q";
+      input.select();
+    };
+    form.addEventListener("submit", submit);
+    box.showModal();
+    input.focus();
+  });
+  return relogin;
+}
+document.getElementById("relogin").addEventListener("cancel", (e) => e.preventDefault());   // only the password closes it
+
+async function api(method, url, body, retried) {
   const opts = { method, headers: { Accept: "application/json" }, cache: "no-store" };
   if (method !== "GET") { opts.headers["X-Requested-With"] = "attendance"; opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body || {}); }
   let r;
   try { r = await fetch(url, opts); } catch (err) { throw new Error("Server bilan aloqa yo'q, internetni tekshiring"); }
-  if (r.status === 401) { location.href = "/login"; throw new Error("Kirish kerak"); }
+  if (r.status === 401 && !retried) { await reloginPrompt(); return api(method, url, body, true); }
+  if (r.status === 401) throw new Error("Kirish kerak");
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.error || "Xato: " + r.status);
+  if (!r.ok) { const err = new Error(data.error || "Xato: " + r.status); err.code = data.code || ""; err.field = data.field || ""; throw err; }
   return data;
 }
 let toastTimer;
-function say(text, ok, hold) {   // hold: a progress note that stays until the next message
+// While a sheet is open an error is shown in it, above its buttons: a toast at the bottom of the page
+// can sit behind the dialog's backdrop. field names the control to mark and focus, when the server knows it.
+function sheetError(text, field) {
+  const box = document.getElementById("sheet-error");
+  box.textContent = text; box.hidden = !text;
+  sheetBox.querySelectorAll("[aria-invalid]").forEach((x) => { x.removeAttribute("aria-invalid"); x.removeAttribute("aria-describedby"); });
+  const el = text && field ? sheetBox.querySelector('[name="' + field + '"]') : null;
+  if (el) { el.setAttribute("aria-invalid", "true"); el.setAttribute("aria-describedby", "sheet-error"); el.focus(); }
+}
+function say(text, ok, hold, field) {   // hold: a progress note that stays until the next message
+  if (sheetBox.open && !ok) { msgBox.hidden = true; return sheetError(text, field); }
   clearTimeout(toastTimer);
   msgBox.textContent = text; msgBox.className = "toast" + (ok ? " ok" : ""); msgBox.hidden = !text;
+  msgBox.setAttribute("role", ok ? "status" : "alert");   // a result is polite, an error interrupts
   if (ok && !hold) toastTimer = setTimeout(() => { msgBox.hidden = true; }, 2500);
 }
 msgBox.addEventListener("click", () => say(""));
+// a done thing that can still be taken back: the toast carries the button for ten seconds
+function sayUndo(text, undo) {
+  say(text, true, true);
+  msgBox.append(" ", h("button", { type: "button", class: "quiet toast-undo", text: "Qaytarish", onclick: async (e) => {
+    e.stopPropagation();
+    if (await act(undo)) say("Qaytarildi", true);
+  } }));
+  toastTimer = setTimeout(() => { msgBox.hidden = true; }, 10000);
+}
 async function act(fn) {
-  try { if (!msgBox.classList.contains("ok")) say(""); return await fn(); } catch (err) { say(err.message); return null; }   // a success toast outlives the next navigation
+  try { if (!msgBox.classList.contains("ok")) say(""); if (sheetBox.open) sheetError(""); return await fn(); } catch (err) { say(err.message, false, false, err.field); return null; }   // a success toast outlives the next navigation
 }
 function ask(message, okText, danger) {
   return new Promise((resolve) => {
@@ -172,13 +229,15 @@ function ask(message, okText, danger) {
   });
 }
 function openSheet(title, body) {
+  sheetError("");
   sheetBox.querySelector("#sheet-title").textContent = title;
   sheetBox.querySelector("#sheet-body").replaceChildren(body);
   sheetBox.showModal();
 }
 async function refreshBadge() {
   const badge = document.getElementById("owed-badge");
-  try { const { owed } = await api("GET", "/api/retakes"); badge.textContent = String(owed); badge.hidden = !owed; } catch (err) { badge.hidden = true; }
+  if (!semesterNow.loaded) await loadSemester();   // the badge counts this semester's debts only
+  try { const { owed } = thisSemester(await api("GET", "/api/retakes")); badge.textContent = String(owed); badge.hidden = !owed; } catch (err) { badge.hidden = true; }
   refreshNotes();
   try {
     const { state, last_sync: last } = await api("GET", "/api/oxu/status");
@@ -219,25 +278,68 @@ async function route() {
     });
     document.title = (PAGE_TITLES[nav] ? PAGE_TITLES[nav] + " · " : "") + "attendance";
     refreshBadge();
-    const loading = setTimeout(() => show(skeleton()), 120);
+    const arg = m[1] ? Number(m[1]) : null;
+    const here = () => { const r = routeOf(location.hash); return !!r && r[0] === fn && r[1] === arg; };
+    const loading = setTimeout(() => { if (here()) view.replaceChildren(skeleton()); }, 120);
     if (!subjectStyles.loaded) await loadStyles();
-    const res = await act(() => fn(m[1] ? Number(m[1]) : null));
+    if (!semesterNow.loaded) await loadSemester();
+    const res = await act(() => fn(arg));
     clearTimeout(loading);
-    if (res === null) show(h("div", { class: "card empty" }, h("p", { text: "Ma'lumotni yuklab bo'lmadi." }), h("button", { type: "button", text: "Qayta urinish", onclick: route })));
+    if (res === null && here()) show(h("div", { class: "card empty" }, h("p", { text: "Ma'lumotni yuklab bo'lmadi." }), h("button", { type: "button", text: "Qayta urinish", onclick: route })));
     return;
   }
-  location.hash = "#/";
+  document.title = "Sahifa topilmadi · attendance";
+  show(pageHead("Sahifa topilmadi"), h("div", { class: "card empty" }, h("p", { text: "Bunday sahifa yo'q." }), h("a", { class: "button primary", href: "#/", text: "Bosh sahifa" })));
 }
 function skeleton() {
   return h("div", { class: "skeleton", role: "status", "aria-label": "Yuklanmoqda" }, h("i", { class: "s-title" }), h("i", { class: "s-sub" }), h("div", { class: "s-row" }, h("i"), h("i"), h("i")), h("i", { class: "s-block" }));
 }
-function show(...nodes) { view.replaceChildren(...nodes.flat(Infinity).filter(Boolean)); }
+// The view a hash belongs to, as [function, argument], or null.
+function routeOf(hash) {
+  for (const [re, fn] of routes) { const m = re.exec(hash || "#/"); if (m) return [fn, m[1] ? Number(m[1]) : null]; }
+  return null;
+}
+// A view's own show: it paints only while the page is still that view, and only for the newest run of
+// it. A view that finishes late (a sync of a minute, a slow request) never covers the page the owner
+// went to meanwhile, and an older run never covers a newer one.
+let paintGen = 0;
+function painter(fn, arg) {
+  const gen = ++paintGen;
+  const live = () => { const r = routeOf(location.hash); return gen === paintGen && !!r && r[0] === fn && (arg === undefined || r[1] === arg); };
+  const paint = (...nodes) => { if (live()) show(...nodes); };
+  paint.live = live;
+  return paint;
+}
+
+// what identifies an element across a redraw of the same page
+const placeKey = (el) => el.dataset.key || el.tagName + "|" + (el.getAttribute("aria-label") || (el.tagName === "DETAILS" ? el.querySelector("summary")?.textContent : el.textContent) || "").trim().slice(0, 80);
+let shownHash = null;
+// Replaces the page. Drawn again on the same page (after a save), it keeps the scroll position, the open
+// sections and the focus; a new page starts at the top (the hashchange handler).
+function show(...nodes) {
+  const here = location.hash || "#/", same = shownHash === here;
+  const keep = same ? { y: window.scrollY, open: new Set([...view.querySelectorAll("details[open]")].map(placeKey)),
+    focus: view.contains(document.activeElement) && document.activeElement !== view ? placeKey(document.activeElement) : null } : null;
+  view.replaceChildren(...nodes.flat(Infinity).filter(Boolean));
+  shownHash = here;
+  if (!keep) return;
+  for (const d of view.querySelectorAll("details")) if (keep.open.has(placeKey(d))) d.open = true;
+  if (keep.focus) {
+    const el = [...view.querySelectorAll("button, a, input, select, textarea, summary")].find((x) => placeKey(x) === keep.focus);
+    if (el) el.focus({ preventScroll: true });
+  }
+  window.scrollTo(0, keep.y);
+}
 
 /* ------------------------------------------------------------ lessons (home) */
 async function lessonsView() {
+  const show = painter(lessonsView, null);   // paints only while this is still the page
   const t = today();
-  const [{ sessions }, { para: freePara }, debts] = await Promise.all([api("GET", "/api/sessions"), api("GET", "/api/free-para?date=" + t), api("GET", "/api/retakes"), loadPlans()]);
-  planCache.sessions = sessions;
+  const [{ sessions: allSessions }, { para: freePara }, allDebts] = await Promise.all([api("GET", "/api/sessions"), api("GET", "/api/free-para?date=" + t), api("GET", "/api/retakes"), loadPlans()]);
+  planCache.sessions = allSessions;
+  // this semester's lessons lead; earlier ones stay one click away
+  const sessions = allSessions.filter((s) => inSemesterNow(s.date)), older = allSessions.filter((s) => !inSemesterNow(s.date));
+  const debts = thisSemester(allDebts);
   const start = async (date, para) => {
     const topic = (planCache.plans.get(planKey(date, COURSE.slotOf[para] || para)) || {}).topic || "";
     const res = await act(() => api("POST", "/api/sessions", { date, para, room: COURSE.room, topic }));
@@ -281,14 +383,15 @@ async function lessonsView() {
     return planned ? h("td", { class: "topic muted", title: "Rejadagi mavzu, davomatda hali yozilmagan" }, planned, " ", chip("reja"))
       : h("td", { class: "topic" + (s.finished_at ? " warn-text" : " muted"), text: "Mavzu yozilmagan" });
   };
+  const tableOf = (list) => {
   const groups = [];
-  for (const s of sessions) {
+  for (const s of list) {
     const key = s.date.slice(0, 7);
     let g = groups[groups.length - 1];
     if (!g || g.key !== key) groups.push(g = { key, items: [] });
     g.items.push(s);
   }
-  const table = sessions.length ? h("div", { class: "card flush" }, h("table", {},
+  return list.length ? h("div", { class: "card flush" }, h("table", {},
     h("thead", {}, h("tr", {}, h("th", { scope: "col", text: "Sana" }), h("th", { scope: "col", text: "Para" }), h("th", { scope: "col", text: "Mavzu" }), h("th", { scope: "col", class: "num", text: "Keldi" }))),
     groups.map((g) => h("tbody", {},
       h("tr", { class: "group" }, h("th", { colspan: "4", scope: "colgroup", text: monthTitle(g.key) })),
@@ -298,6 +401,9 @@ async function lessonsView() {
         topicCell(s),
         h("td", { class: "num nowrap" }, s.finished_at ? h("b", { class: "came" + (s.total && s.came / s.total < 0.8 ? " low" : ""), title: (s.total - s.came) + " ta talaba kelmadi", text: s.came + "/" + s.total }) : sessionChip(s))]))))))
     : h("p", { class: "card empty", text: "Hali davomat olinmagan. O'ngdagi tugma bilan birinchisini boshlang." });
+  };
+  const table = [tableOf(sessions),
+    older.length ? h("details", { class: "fold-line older", "data-key": "older-lessons" }, h("summary", { text: "Oldingi semestrlar (" + older.length + " ta dars)" }), tableOf(older)) : null];
 
   show(pageHead("Darslar", COURSE.subject + " · " + COURSE.group),
     h("div", { class: "tiles" },
@@ -307,10 +413,9 @@ async function lessonsView() {
 }
 
 /* ------------------------------------------------------------ one lesson */
-// names compared the way they are typed: no case, no apostrophe variants
-const plainName = (x) => x.toLowerCase().replace(/[ʻʼ'`‘’]/g, "").trim();
 
 async function lessonView(id) {
+  const show = painter(lessonView, id);   // paints only while this is still the page
   const [s] = await Promise.all([api("GET", "/api/sessions/" + id), loadPlans()]);
   const entry = sessionEntry(s), plan = planOf(entry);
   const big = h("b", { class: "big-count" });
@@ -341,12 +446,17 @@ async function lessonView(id) {
       if (res) { st.grade = grade.value.trim() === "" ? null : Number(grade.value.replace(",", ".")); grade.classList.add("saved"); setTimeout(() => grade.classList.remove("saved"), 900); }
       else grade.value = st.grade ?? "";
     });
+    let busy = false;   // one change per student at a time: quick clicks cannot reach the server out of order
     const toggle = async () => {
-      const next = !st.present;
-      if (next && st.retake_at && !(await ask(st.name + " qarzni topshirgan. «Keldi» qilinsa, topshirish yozuvi o'chadi.", "Keldi qilish", true))) return;
-      st.present = next ? 1 : 0; if (next) st.retake_at = null; paint(); updateCount();
-      const ok = await act(() => api("PUT", "/api/sessions/" + id + "/students/" + st.id, { present: next }));
-      if (!ok) { st.present = next ? 0 : 1; paint(); updateCount(); } else refreshBadge();
+      if (busy) return;
+      busy = true;
+      try {
+        const was = { present: st.present, retake_at: st.retake_at }, next = !st.present;
+        if (next && st.retake_at && !(await ask(st.name + " qarzni topshirgan. «Keldi» qilinsa, topshirish yozuvi o'chadi.", "Keldi qilish", true))) return;
+        st.present = next ? 1 : 0; if (next) st.retake_at = null; paint(); updateCount();
+        const ok = await act(() => api("PUT", "/api/sessions/" + id + "/students/" + st.id, { present: next }));
+        if (!ok) { Object.assign(st, was); paint(); updateCount(); } else refreshBadge();
+      } finally { busy = false; }
     };
     btn.addEventListener("click", toggle);
     const tr = h("tr", { class: "tap", onclick: (e) => { if (!e.target.closest("button, input")) toggle(); } },
@@ -426,20 +536,57 @@ async function lessonView(id) {
           field("Para", h("select", { name: "para" }, [1, 2].map((p) => h("option", { value: String(p), selected: s.para === p, text: paraText(p) }))))),
         h("button", { type: "submit", class: "wide", text: "Sanani saqlash" })),
       h("button", { type: "button", class: "danger wide", text: "Davomatni o'chirish", onclick: async () => {
-        if (!(await ask(dayText(s.date) + " davomati o'chirilsinmi? Buni qaytarib bo'lmaydi.", "O'chirish", true))) return;
-        if (await act(() => api("DELETE", "/api/sessions/" + id))) location.hash = "#/darslar";
+        if (!(await ask(dayText(s.date) + ", " + paraText(s.para) + " davomati o'chirilsinmi? Baholar va qayta topshirishlar ham ketadi.", "O'chirish", true))) return;
+        if (!(await act(() => api("DELETE", "/api/sessions/" + id)))) return;
+        location.hash = "#/darslar";
+        sayUndo(dayText(s.date) + " davomati o'chirildi.", async () => {
+          await api("POST", "/api/sessions/" + id + "/restore");
+          refreshBadge();
+          location.hash = "#/dars/" + id;
+          return true;
+        });
       } })));
 
+  // the lesson as the classroom knows it: what and who, then when and where
+  const slotTimes = PARA_TIMES[COURSE.slotOf[s.para] || s.para];
+  const when = s.finished_at ? "olindi " + span(s) : "boshlandi " + timeText(s.started_at);
+  // a big group in two columns on a wide screen, so the whole list fits without scrolling
+  const half = s.students.length > 16 ? Math.ceil(rows.length / 2) : rows.length;
+  const rosterTable = (list, extra, i) => h("table", { class: "roster" },
+    h("caption", { class: "sr-only", text: i ? "Talabalar, davomi" : "Talabalar: qatorni bosib keldi yoki kelmadi qiling" }),
+    h("thead", {}, h("tr", {}, h("th", { scope: "col", class: "n", text: "#" }), h("th", { scope: "col", text: "Talaba" }), h("th", { scope: "col", class: "w-state", text: "Holat" }), h("th", { scope: "col", class: "w-grade", text: "Baho" }))),
+    h("tbody", {}, list, extra));
   show(back("#/darslar", "Darslar"),
-    pageHead(longDay(s.date), [paraText(s.para), " · ", span(s), s.room ? " · " + s.room : ""], sessionChip(s)),
+    pageHead(COURSE.subject + " · " + COURSE.group,
+      [capital(longDay(s.date)), paraText(s.para), slotTimes ? slotTimes.join("–") : null, s.room || null, when].filter(Boolean).join(" · "), sessionChip(s)),
     h("div", { class: "split" },
       h("div", {}, s.students.length ? h("div", { class: "roster-find" }, field("Talabani topish", find), found) : null,
-        s.students.length ? h("div", { class: "card flush" }, h("table", { class: "roster" },
-        h("caption", { class: "sr-only", text: "Talabalar: qatorni bosib keldi yoki kelmadi qiling" }),
-        h("thead", {}, h("tr", {}, h("th", { scope: "col", class: "n", text: "#" }), h("th", { scope: "col", text: "Talaba" }), h("th", { scope: "col", class: "w-state", text: "Holat" }), h("th", { scope: "col", class: "w-grade", text: "Baho" }))),
-        h("tbody", {}, rows, noMatch)))
-        : h("p", { class: "card empty" }, "Ro'yxatda talaba yo'q. ", h("a", { href: "#/talabalar", text: "Talabalarni qo'shing" }))),
+        s.students.length ? h("div", { class: "card flush roster-cols" + (half < rows.length ? " two" : "") },
+          rosterTable(rows.slice(0, half), noMatch, 0), half < rows.length ? rosterTable(rows.slice(half), null, 1) : null)
+        : h("p", { class: "card empty" }, "Ro'yxatda talaba yo'q. ", h("a", { href: "#/talabalar", text: "Talabalarni qo'shing" })),
+        (s.missing || []).length ? h("p", { class: "roster-missing" }, (s.missing.length === 1 ? s.missing[0].name + " bu dars ro'yxatida yo'q. " : s.missing.length + " ta faol talaba bu dars ro'yxatida yo'q. "),
+          h("button", { type: "button", class: "quiet", text: "Ro'yxatga qo'shish", onclick: () => addLate(id, s.missing) })) : null),
       rail));
+}
+
+// students added (or back from the archive) after the lesson started: put them on its list
+function addLate(id, missing) {
+  const add = async (st, present, btn) => {
+    btn.disabled = true;
+    if (await act(() => api("POST", "/api/sessions/" + id + "/students", { student_id: st.id, present }))) {
+      btn.closest("li").remove();
+      if (!sheetBox.querySelector(".late li")) sheetBox.close();
+      lessonView(id);
+      if (!present) refreshBadge();
+    } else btn.disabled = false;
+  };
+  openSheet("Ro'yxatga qo'shish", h("div", { class: "stack" },
+    h("p", { class: "sub", text: "Dars boshlangandan keyin qo'shilgan talabalar. Kelganini yoki kelmaganini belgilang." }),
+    h("ul", { class: "plain late" }, missing.map((st) => h("li", {}, h("span", { class: "strong", text: st.name }),
+      h("span", { class: "late-acts" },
+        h("button", { type: "button", class: "small", text: "Keldi", onclick: (e) => add(st, true, e.currentTarget) }),
+        h("button", { type: "button", class: "small", text: "Kelmadi", onclick: (e) => add(st, false, e.currentTarget) }))))),
+    h("div", { class: "dialog-actions" }, h("button", { type: "button", text: "Yopish", onclick: () => sheetBox.close() }))));
 }
 
 /* ------------------------------------------------------------ students */
@@ -447,6 +594,7 @@ const sf = { key: "owed", dir: -1, q: "" };
 const STUDENT_COLS = [["name", "Ism"], ["lessons", "Darslar"], ["came", "Keldi"], ["missed", "Qoldirdi"], ["retaken", "Topshirdi"], ["owed", "Qarz"], ["rate", "Davomat"], ["points", "Ball"], ["average", "O'rtacha"]];
 
 async function studentsView() {
+  const show = painter(studentsView, null);   // paints only while this is still the page
   const { students } = await api("GET", "/api/students");
   const active = students.filter((s) => s.active).length;
   const tbody = h("tbody");
@@ -505,6 +653,7 @@ async function studentsView() {
 }
 
 async function studentView(id) {
+  const show = painter(studentView, id);   // paints only while this is still the page
   const s = await api("GET", "/api/students/" + id);
   const nameInput = h("input", { name: "name", value: s.name, maxlength: "120", required: true });
   const stateOf = (r) => r.present ? h("span", { class: "muted", text: "Keldi" }) : r.retake_at ? chip("Topshirdi", "ok", "check") : chip("Qarz", "bad", "x");
@@ -538,9 +687,11 @@ async function studentView(id) {
 }
 
 /* ------------------------------------------------------------ retakes (debts) */
-const rf = { status: "owed", day: "", student: "" };
+const rf = { status: "owed", day: "", student: "", older: false };
 async function retakesView() {
-  const [r, { rooms }] = await Promise.all([api("GET", "/api/retakes"), api("GET", "/api/rooms")]);
+  const show = painter(retakesView, null);   // paints only while this is still the page
+  const [all, { rooms }] = await Promise.all([api("GET", "/api/retakes"), api("GET", "/api/rooms")]);
+  const current = thisSemester(all), r = rf.older ? all : current;
   const days = [...new Set(r.items.map((x) => x.date))].sort().reverse();
   const items = r.items.filter((x) =>
     (rf.status === "all" || (rf.status === "owed" ? !x.retake_at : x.retake_at)) &&
@@ -596,7 +747,8 @@ async function retakesView() {
     h("div", { class: "tiles" }, tile("Jami qoldirilgan", r.missed), tile("Topshirilgan", r.retaken), tile("Qolgan", r.owed)),
     h("div", { class: "split left" }, master,
       h("div", { class: "stack" },
-        h("div", { class: "toolbar" }, h("div", { class: "seg-row", role: "group", "aria-label": "Holat" }, seg("owed", "Qolgan"), seg("done", "Topshirilgan"), seg("all", "Hammasi")), daySel),
+        h("div", { class: "toolbar" }, h("div", { class: "seg-row", role: "group", "aria-label": "Holat" }, seg("owed", "Qolgan"), seg("done", "Topshirilgan"), seg("all", "Hammasi")),
+          current.older ? h("button", { type: "button", class: "seg older-toggle", "aria-pressed": String(rf.older), title: "Oldingi semestrlarning qarzlari ham", text: "Oldingi semestrlar (" + current.older + ")", onclick: () => { rf.older = !rf.older; retakesView(); } }) : null, daySel),
         rows.length ? h("div", { class: "card flush" }, h("table", {},
           h("thead", {}, h("tr", {}, h("th", { scope: "col", text: "Talaba" }), h("th", { scope: "col", text: "Dars" }), h("th", { scope: "col", text: "Mavzu" }), h("th", { scope: "col", class: "right", text: "Qayta topshirish" }))),
           h("tbody", {}, rows)))
@@ -638,13 +790,7 @@ async function shareSheet() {
 
 /* ------------------------------------------------------------ timetable */
 const jw = { offset: 0 };    // weeks from the current one
-function dowOf(iso) { const [y, m, d] = iso.split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)).getUTCDay(); }
-function shortDate(iso) { const [, m, d] = iso.split("-").map(Number); return d + "-" + MONTHS[m - 1]; }
-function capital(t) { return t[0].toUpperCase() + t.slice(1); }
 
-// "4-o'quv bino, 306-informatika xonasi" -> "K4 / 306"
-function fmtRoom(r) { const m = /^(\d+)-o.quv bino,\s*([\d/]+)/.exec(r || ""); return m ? "K" + m[1] + " / " + m[2] : r || ""; }
-function fmtType(t) { return /amaliy/i.test(t) ? "Amaliy" : /ma.ruza/i.test(t) ? "Ma'ruza" : t || ""; }
 // the timetable cell is narrow: its status shows the short form, so the room is never cut off
 const SHORT_STATE = { "Davomatni boshlash": "Boshlash" };
 function state(text, iconName, cls) {
@@ -660,7 +806,6 @@ function cardLines(subject, type, group, room, status) {   // room and status sh
   return [h("b", { title: subject }, h("span", { class: "name-full", text: subject }), h("span", { class: "name-short", text: shortSubject(subject) })), h("small", { text: meta, title: meta }),
     room || status ? h("span", { class: "slot-foot" }, room ? h("small", { text: room, title: room }) : null, status) : null];
 }
-const cancelKey = (date, para, subject) => date + "|" + Number(para) + "|" + canonSubject(subject);
 async function setCancelled(e, cancelled) {
   const subject = e.kind === "site" ? canonSubject(e.lesson.subject) : e.subject || COURSE.subject;
   if (await act(() => api("PUT", "/api/cancelled", { date: e.date, para: e.para, subject, cancelled }))) scheduleView();
@@ -698,20 +843,16 @@ function nowLine(p, now) {
   return line;
 }
 // a lesson still to come opens its plan; one that is over opens the site, where its attendance is taken
-function siteCard(l, unsaved, color, e) {
-  const t = today(), past = lessonOver(l);
-  const taken = unsaved && past && !unsaved.has(l.date + "|" + Number(l.para));
-  const coming = e && !paraOver(e, t, nowTime());
-  // without status data a past lesson simply shows no status line
-  const status = coming ? planState(planOf(e)) : taken ? state("Olingan", "check", "ok") : unsaved && past ? state("Olinmagan", null, "bad") : null;
+function siteCard(l, ctx, color, e) {
+  const st = Timetable.siteStatus(l, ctx, today(), nowTime());
+  const taken = st === "taken", coming = e && st === "coming";
+  // "Noma'lum": the lesson ended after the site's list was last read, so the app cannot know
+  const status = coming ? planState(planOf(e)) : taken ? state("Olingan", "check", "ok") : st === "missing" ? state("Olinmagan", null, "bad") : st === "unknown" ? state("Noma'lum", null, "unknown") : null;
   const lines = cardLines(l.subject, fmtType(l.type), l.group, fmtRoom(l.room), status);
   const cls = "slot " + color + (taken ? " taken" : "");
   if (coming) return h("button", { type: "button", class: cls, "aria-label": l.subject + ", " + shortDate(l.date) + ", " + l.para + "-para: dars rejasi", onclick: () => openPlan(e, route) }, lines);
   return l.url ? h("a", { class: cls, href: SITE + l.url, target: "_blank", rel: "noopener", title: "digital.oxu.uz da ochish" }, lines) : h("div", { class: cls }, lines);
 }
-
-// the load spells some subjects "Name(Other name)" while the schedule uses the name in brackets
-function canonSubject(name) { const m = /\(([^()]+)\)\s*$/.exec(name || ""); return (m ? m[1] : name || "").trim(); }
 
 // One colour per subject, the same on every page and every week. A subject keeps the colour it was
 // first given (saved on the server), so a new subject in the load never reshuffles the others; the
@@ -776,47 +917,17 @@ function editSubject(name, after) {
     h("div", { class: "dialog-actions" }, h("button", { type: "button", text: "Yopish", onclick: () => sheetBox.close() }), h("button", { type: "submit", class: "primary", text: "Saqlash" }))));
 }
 
-function lessonContext(sessions, data, cancelled) {
-  const unsavedList = (data && data.unsaved) || null;
-  const known = new Set(((data && data.lessons) || []).map((l) => l.date + "|" + Number(l.para)));
-  return {
-    sessions, cancelled, unsavedList,
-    firstDay: sessions.map((s) => s.date).sort()[0],
-    unsaved: unsavedList && new Map(unsavedList.map((l) => [l.date + "|" + Number(l.para), l])),
-    siteLessons: [...((data && data.lessons) || []), ...(unsavedList || []).filter((l) => !known.has(l.date + "|" + Number(l.para)))],
-  };
-}
-// everything on the given days, as date+para entries; a lesson held on another day still shows up
-function entriesFor(dates, ctx) {
-  const out = [];
-  const keep = (e) => { if (!ctx.cancelled.has(cancelKey(e.date, e.para, e.kind === "site" ? e.lesson.subject : COURSE.subject))) out.push(e); };
-  for (const date of dates) {
-    for (const [appPara, para] of Object.entries(COURSE.slotOf).map(([a, p]) => [Number(a), p])) {
-      const session = ctx.sessions.find((s) => s.date === date && s.para === appPara);
-      if (session || (COURSE.days.includes(dowOf(date)) && (!ctx.firstDay || date >= ctx.firstDay))) keep({ kind: "course", date, para, appPara, session });
-    }
-    for (const l of ctx.siteLessons) if (l.date === date) keep({ kind: "site", date, para: Number(l.para), lesson: l });
-  }
-  return out;
+// the semester the course lessons are generated in; loaded once, and again when Kabinet saves it
+const semesterNow = { loaded: false, start: "", weeks: 0, end: "" };
+async function loadSemester() {
+  try {
+    const { start, weeks } = await api("GET", "/api/semester");
+    Object.assign(semesterNow, { loaded: true, start, weeks, end: Pace.semester(start, weeks, start).end });
+  } catch (err) { /* without it the course lessons are not bounded */ }
 }
 
-const paraOver = (e, t, now) => e.date < t || (e.date === t && !!PARA_TIMES[e.para] && PARA_TIMES[e.para][1] <= now);
 // the site lists a lesson as "unsaved" from the morning of its day; it is only missing once its para has ended
 const lessonOver = (l) => paraOver({ date: l.date, para: Number(l.para) }, today(), nowTime());
-// this app is the only record for the group, so every lesson that ended without finished attendance counts
-function courseGaps(ctx, t, now) {
-  if (!ctx.firstDay) return [];
-  const dates = [];
-  for (let d = ctx.firstDay; d <= t; d = shiftDay(d, 1)) dates.push(d);
-  return entriesFor(dates, ctx).filter((e) => e.kind === "course" && paraOver(e, t, now) && !(e.session && e.session.finished_at))
-    .sort((a, b) => b.date.localeCompare(a.date) || b.para - a.para);
-}
-// the lesson happening now, or the next one that has not been taken yet
-function nextEntry(ctx, t, now) {
-  return entriesFor([...Array(14).keys()].map((i) => shiftDay(t, i)), ctx)
-    .filter((e) => (e.date > t || (PARA_TIMES[e.para] && PARA_TIMES[e.para][1] >= now)) && !(e.session && e.session.finished_at))
-    .sort((a, b) => a.date.localeCompare(b.date) || a.para - b.para)[0];
-}
 // the home page's lead: the next lesson at a size that reads from across the room, with its action
 // note: replaces the countdown, for a lesson that is over but still needs its attendance finished
 function nextHero(e, t, now, action, note) {
@@ -863,14 +974,6 @@ async function loadPlans() {
   return planCache;
 }
 const planOf = (e) => planCache.plans.get(planKey(e.date, e.para)) || null;
-// subject, group and the rest of a timetable entry, the same shape for site and course lessons
-function entryInfo(e) {
-  return e.kind === "site"
-    ? { subject: canonSubject(e.lesson.subject), name: e.lesson.subject, group: e.lesson.group || "", type: fmtType(e.lesson.type), room: fmtRoom(e.lesson.room), url: e.lesson.url }
-    : { subject: COURSE.subject, name: COURSE.subject, group: COURSE.group, type: COURSE.type, room: COURSE.room };
-}
-const sameClass = (a, b) => a.subject === b.subject && a.group === b.group;
-function planStage(p) { return !p ? "none" : p.ready ? "ready" : p.topic || p.items.length ? "planned" : "none"; }
 const STAGES = { none: "Reja yo'q", planned: "Reja bor", ready: "Tayyor" };
 const OUTCOMES = { done: "O'tildi", partial: "Qisman o'tildi", moved: "Keyingi darsga qoldi" };
 function planState(p) {
@@ -882,32 +985,9 @@ function planChip(p) {
   return chip(STAGES[st], st === "ready" ? "ok" : st === "planned" ? "live" : null, st === "ready" ? "check" : null);
 }
 
-// topics of a class taught: a planned lesson whose para is over counts as taught unless its plan says
-// it was only partly done or moved; and the course group's finished lessons
-const planHeld = (p) => paraOver({ date: p.date, para: Number(p.para) }, today(), nowTime());
-const planTaught = (p) => p.outcome === "done" || (!p.outcome && planHeld(p));
-function coveredTopics(info, sessions) {
-  const out = new Set();
-  for (const p of planCache.plans.values()) if (planTaught(p) && p.topic && sameClass(p, info)) out.add(normTitle(p.topic));
-  if (info.subject === COURSE.subject && info.group === COURSE.group) for (const s of sessions || []) if (s.finished_at && s.topic) out.add(normTitle(s.topic));
-  return out;
-}
-// the first topic of the semester list that is neither taught nor already planned for this class
-function suggestTopic(info, sessions) {
-  const done = coveredTopics(info, sessions || planCache.sessions);
-  const planned = new Set([...planCache.plans.values()].filter((p) => sameClass(p, info) && p.topic && !planHeld(p)).map((p) => normTitle(p.topic)));
-  return (planCache.topics[info.subject] || []).find((t) => !done.has(normTitle(t)) && !planned.has(normTitle(t))) || "";
-}
-
 async function classContext() {   // the timetable as the other pages see it, for finding the next lesson of a class
   const [{ sessions }, { data }, { items }] = await Promise.all([api("GET", "/api/sessions"), api("GET", "/api/oxu"), api("GET", "/api/cancelled")]);
   return lessonContext(sessions, data, new Set(items.map((c) => cancelKey(c.date, c.para, c.subject))));
-}
-function nextOfClass(e, ctx) {
-  const info = entryInfo(e);
-  return entriesFor([...Array(60).keys()].map((i) => shiftDay(e.date, i)), ctx)
-    .filter((x) => (x.date > e.date || x.para > e.para) && sameClass(entryInfo(x), info))
-    .sort((a, b) => a.date.localeCompare(b.date) || a.para - b.para)[0] || null;
 }
 const savePlan = (e, p) => {
   const info = entryInfo(e);
@@ -1000,6 +1080,7 @@ function openPlan(e, after, sessions) {
 // the plans page: the current lesson day, the rest of the week folded, and each class against its topic list
 const PLAN_DAYS = 7;
 async function plansView() {
+  const show = painter(plansView, null);   // paints only while this is still the page
   const [{ sessions }, { data }, { items: cancelledList }] = await Promise.all([api("GET", "/api/sessions"), api("GET", "/api/oxu"), api("GET", "/api/cancelled"), loadPlans()]);
   const t = today(), now = nowTime();
   const cancelled = new Set(cancelledList.map((c) => cancelKey(c.date, c.para, c.subject)));
@@ -1076,23 +1157,35 @@ async function plansView() {
       h("div", { class: "dialog-actions" }, h("button", { type: "button", text: "Yopish", onclick: () => sheetBox.close() }), h("button", { type: "submit", class: "primary", text: "Saqlash" }))));
     area.focus();
   };
-  const courseRows = [...classes.values()].sort((a, b) => a.info.subject.localeCompare(b.info.subject) || a.info.group.localeCompare(b.info.group)).map(({ info, days: taughtDays }) => {
-    const held = taughtDays.size;
-    const list = planCache.topics[info.subject] || [];
-    const done = coveredTopics(info, sessions);
-    const taught = list.filter((x) => done.has(normTitle(x))).length;
-    const behind = held - taught;
+  // one row per subject: the topic list belongs to the subject, its groups only differ in how far they are
+  const bySubject = new Map();
+  for (const c of classes.values()) {
+    if (!bySubject.has(c.info.subject)) bySubject.set(c.info.subject, []);
+    bySubject.get(c.info.subject).push(c);
+  }
+  const courseRows = [...bySubject.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([subject, group]) => {
+    const list = planCache.topics[subject] || [];
+    const shown = group.map((c) => ({ ...c, name: c.info.group.replace(/_yopildi.*/i, "") }));
+    // each group's lag; the subject row shows the one furthest behind and says which it is
+    const lag = shown.map((c) => {
+      const done = coveredTopics(c.info, sessions);
+      return { c, taught: list.filter((x) => done.has(normTitle(x))).length, held: c.days.size };
+    }).map((x) => ({ ...x, behind: x.held - x.taught }));
+    const worst = lag.reduce((m, x) => (x.behind > m.behind ? x : m), lag[0]);
+    const best = lag.reduce((m, x) => (x.taught > m.taught ? x : m), lag[0]);
+    const groups = shown.map((c) => c.name).filter(Boolean), few = groups.slice(0, 3);
+    const info = group[0].info;
     return h("tr", {},
-      h("td", { class: "nowrap" }, h("b", { text: info.name }), h("span", { class: "muted", text: info.group ? " · " + info.group : "" })),
-      list.length ? [h("td", { class: "w-rate" }, h("span", { class: "rate" }, meter(100 * taught / list.length), h("b", { text: taught + " / " + list.length }))),
-        h("td", { class: "muted" + (behind > 0 ? " warn-text" : ""), text: behind > 0 ? "~" + behind + " dars orqada" : held ? "Reja bo'yicha" : "Hali dars bo'lmagan" })]
+      h("td", {}, h("b", { text: info.name }), groups.length ? h("small", { class: "muted block", text: few.join(", ") + (groups.length > 3 ? " +" + (groups.length - 3) : "") }) : null),
+      list.length ? [h("td", { class: "w-rate" }, h("span", { class: "rate" }, meter(100 * best.taught / list.length), h("b", { text: best.taught + " / " + list.length }))),
+        h("td", { class: "muted" + (worst.behind > 0 ? " warn-text" : ""), text: worst.behind > 0 ? "~" + worst.behind + " dars orqada" + (group.length > 1 ? ": " + worst.c.name : "") : worst.held ? "Reja bo'yicha" : "Hali dars bo'lmagan" })]
         : [h("td", { class: "muted", colspan: "2", text: "Mavzular ro'yxati kiritilmagan" })],
       h("td", { class: "right" }, h("button", { type: "button", class: "quiet", text: list.length ? "Mavzular" : "Kiritish", onclick: () => editTopics(info) })));
   });
 
   const asRows = (list) => list.map((e) => ({ date: e.date, para: e.para, row: row(e) }));
   const leadTitle = !lead ? "Kelgusi darslar" : lead === t ? "Bugungi darslar" : lead === shiftDay(t, 1) ? "Ertangi darslar" : capital(weekday(lead)) + "dagi darslar";
-  show(pageHead("Dars rejasi", !current.length ? "Keyingi " + PLAN_DAYS + " kunda dars yo'q" : capital(dayTitle(lead)) + " · " + current.length + " ta dars" + (ready === current.length ? ", hammasiga tayyor" : ready ? ", " + ready + " tasiga tayyor" : ", hali tayyor emas")),
+  show(withAge(data, "lessons", "Shundan keyin o'tgan darslar holati noma'lum.", pageHead("Dars rejasi", !current.length ? "Keyingi " + PLAN_DAYS + " kunda dars yo'q" : capital(dayTitle(lead)) + " · " + current.length + " ta dars" + (ready === current.length ? ", hammasiga tayyor" : ready ? ", " + ready + " tasiga tayyor" : ", hali tayyor emas"))),
     h("section", { "aria-labelledby": "next-h", class: "stack" }, h("h2", { id: "next-h", class: "section-title", text: leadTitle }),
       current.length ? table(asRows(current)) : h("p", { class: "card empty", text: "Keyingi " + PLAN_DAYS + " kunda dars yo'q." })),
     later.length ? h("details", { class: "fold-line later-days" }, h("summary", { text: "Keyingi kunlar: " + later.length + " ta dars" }), table(asRows(later))) : null,
@@ -1102,6 +1195,7 @@ async function plansView() {
 }
 
 async function scheduleView() {
+  const show = painter(scheduleView, null);   // paints only while this is still the page
   const [{ sessions }, { data, synced_at }, { items: cancelledList }] = await Promise.all([api("GET", "/api/sessions"), api("GET", "/api/oxu"), api("GET", "/api/cancelled"), loadPlans()]);
   planCache.sessions = sessions;
   const cancelled = new Set(cancelledList.map((c) => cancelKey(c.date, c.para, c.subject)));
@@ -1141,10 +1235,12 @@ async function scheduleView() {
   const isMissing = (e) => paraOver(e, t, now) && (e.kind === "course" ? !(e.session && e.session.finished_at) : !!(unsaved && unsaved.has(e.date + "|" + e.para)));
   const held = entries.filter((e) => paraOver(e, t, now)).length, missingNow = entries.filter(isMissing).length;
   const semester = await api("GET", "/api/semester"), weekNo = Pace.semester(semester.start, semester.weeks, monday).week;
+  const unknownNow = entries.filter((e) => e.kind === "site" && Timetable.siteStatus(e.lesson, ctx, t, now) === "unknown").length;
   const summary = h("p", { class: "week-sum" },
     h("span", {}, h("b", { text: String(count) }), " ta dars"), h("span", {}, h("b", { text: String(count * HOURS_PER_PARA) }), " soat"),
     h("span", {}, h("b", { text: String(held) }), " ta o'tildi"),
-    missingNow ? h("span", { class: "neg" }, h("b", { text: String(missingNow) }), " ta davomatsiz") : null);
+    missingNow ? h("span", { class: "neg" }, h("b", { text: String(missingNow) }), " ta davomatsiz") : null,
+    unknownNow ? h("span", { class: "muted", title: "Sinxronlangandan keyin o'tgan darslar: davomati saytda olinganmi, noma'lum" }, h("b", { text: String(unknownNow) }), " ta noma'lum") : null);
   const dayTotal = (d) => { const n = entries.filter((e) => e.date === d).length; return h("td", { class: d === t ? "today" : null, text: n ? n + " dars · " + n * HOURS_PER_PARA + " soat" : "–" }); };
   const table = h("div", { class: "card flush" }, h("table", { class: "timetable" },
     h("caption", { class: "sr-only", text: "Haftalik dars jadvali" }),
@@ -1155,7 +1251,7 @@ async function scheduleView() {
       h("th", { scope: "row", class: "para-col" }, h("span", { text: p + "-para" }), PARA_TIMES[p] ? h("small", { text: PARA_TIMES[p].join("–") }) : null),
       shownDays.map((d) => h("td", { class: (d === t ? "today" : "") + (d === t && nowPara(p) ? " now" : "") },
         d === t && nowPara(p) ? nowLine(p, now) : null,
-        entries.filter((e) => e.date === d && e.para === p).map((e) => mark(e.kind === "site" ? withCancel(siteCard(e.lesson, unsaved, colorOf(e.lesson.subject), e), e) : e.session ? courseCard(e, colorOf(COURSE.subject)) : withCancel(courseCard(e, colorOf(COURSE.subject)), e), e)))))))));
+        entries.filter((e) => e.date === d && e.para === p).map((e) => mark(e.kind === "site" ? withCancel(siteCard(e.lesson, ctx, colorOf(e.lesson.subject), e), e) : e.session ? courseCard(e, colorOf(COURSE.subject)) : withCancel(courseCard(e, colorOf(COURSE.subject)), e), e)))))))));
 
   const noSite = !entries.some((e) => e.kind === "site");
   const inWeek = [...new Set(entries.map((e) => e.kind === "site" ? e.lesson.subject : COURSE.subject))].sort((a, b) => colorOf(a).localeCompare(colorOf(b)));   // the same order every week
@@ -1185,10 +1281,10 @@ async function scheduleView() {
     h("ul", { class: "plain" }, weekCancelled.map((c) => h("li", {}, h("span", { text: shortDate(c.date) + ", " + c.para + "-para · " + c.subject }),
       h("button", { type: "button", class: "quiet", text: "Qaytarish", onclick: async () => { if (await act(() => api("PUT", "/api/cancelled", { date: c.date, para: c.para, subject: c.subject, cancelled: false }))) scheduleView(); } }))))) : null;
 
-  show(pageHead("Dars jadvali", [range + (weekNo > 0 && monday <= Pace.semester(semester.start, semester.weeks, monday).end ? " · " + weekNo + "-hafta" : ""), summary],
+  show(withAge(data, "unsaved", "Shundan keyin o'tgan darslar holati noma'lum.", pageHead("Dars jadvali", [range + (weekNo > 0 && monday <= Pace.semester(semester.start, semester.weeks, monday).end ? " · " + weekNo + "-hafta" : ""), summary],
       h("button", { type: "button", "aria-label": "Oldingi hafta", onclick: move(-1, "Oldingi hafta") }, icon("back")),
       h("button", { type: "button", text: "Bu hafta", disabled: jw.offset === 0, onclick: move(0, "Keyingi hafta") }),
-      h("button", { type: "button", "aria-label": "Keyingi hafta", onclick: move(1, "Keyingi hafta") }, icon("forward"))),
+      h("button", { type: "button", "aria-label": "Keyingi hafta", onclick: move(1, "Keyingi hafta") }, icon("forward")))),
     jw.offset === 0 ? next : null,
     open ? missing : null,
     data && !unsavedList ? h("p", { class: "sub" }, "Davomat olingan yoki olinmaganini ko'rish uchun ", h("a", { href: "#/kabinet", text: "Kabinetda qayta sinxronlang" }), ".") : null,
@@ -1201,88 +1297,7 @@ async function scheduleView() {
 }
 
 /* ------------------------------------------------------------ teaching load */
-const HOURS_PER_PARA = 2;    // checked against the site: 8 lessons = a 16-hour line
-const hrs = (v) => String(Math.round(v * 10) / 10);
 
-// part-time (sirtqi) groups, named S1-KT-22 and so on, study in a session of a few weeks, not the whole semester
-const isSirtqi = (group) => group.split(/,\s*/).every((g) => /^S\d/i.test(g.trim()));
-const SESSION_MIN_DAYS = 21;   // a session is at least three weeks, even while the timetable shows less of it
-// a part-time group's session: the first to the last lesson in the timetable of any line it is in
-// (its lectures are shared with other groups of the same session), at least three weeks long
-function sessionWindows(lines) {
-  const span = new Map();
-  for (const l of lines) {
-    if (!l.sirtqi || !l.last) continue;
-    for (const g of l.group.split(/,\s*/)) {
-      const w = span.get(g) || { first: l.first, last: l.last };
-      span.set(g, { first: l.first < w.first ? l.first : w.first, last: l.last > w.last ? l.last : w.last });
-    }
-  }
-  return (l) => {
-    const ws = l.group.split(/,\s*/).map((g) => span.get(g)).filter(Boolean);
-    if (!ws.length) return null;
-    const first = ws.reduce((m, w) => (w.first < m ? w.first : m), ws[0].first), last = ws.reduce((m, w) => (w.last > m ? w.last : m), ws[0].last);
-    const minEnd = shiftDay(first, SESSION_MIN_DAYS - 1);
-    return { first, last: last > minEnd ? last : minEnd };
-  };
-}
-function computeLoad(data, sessions, coursePlan, cancelled) {
-  const load = data.load;
-  const t = today(), now = nowTime(), start = load.start || "";
-  const key = (l) => l.date + "|" + Number(l.para);
-  const unsaved = new Set(((data.unsaved) || []).filter((l) => l.date >= start).map(key));
-  const seen = new Set((data.lessons || []).map(key));
-  const lessons = [...(data.lessons || []), ...((data.unsaved) || []).filter((l) => l.date >= start && !seen.has(key(l)))].filter((l) => !cancelled.has(cancelKey(l.date, l.para, l.subject)));
-  const ended = (l) => { const p = PARA_TIMES[Number(l.para)]; return l.date < t || (l.date === t && p && p[1] <= now); };
-
-  const lines = [], independent = {};
-  for (const item of load.items) {
-    const subject = canonSubject(item.subject);
-    if (/mustaqil/i.test(item.type)) { independent[subject] = (independent[subject] || 0) + Number(item.hours); continue; }
-    const mine = lessons.filter((l) => canonSubject(l.subject) === subject && l.group === item.group && l.type === item.type);
-    const held = mine.filter(ended);
-    const noAtt = held.filter((l) => unsaved.has(key(l))).length * HOURS_PER_PARA;
-    const done = held.length * HOURS_PER_PARA - noAtt;
-    // a closed group will not be taught any more, so what it got is its plan; the site's figure stays for the tooltip
-    const sitePlan = Number(item.hours), closed = /yopildi/i.test(item.group), plan = closed ? done + noAtt : sitePlan;
-    // lessons in the timetable that have not been held yet (the lighter cards)
-    const queued = closed ? 0 : mine.filter((l) => !ended(l)).length;
-    const first = mine.reduce((m, l) => (l.date < m ? l.date : m), "9999-12-31"), last = mine.reduce((m, l) => (l.date > m ? l.date : m), "");
-    const left = Math.max(0, plan - done - noAtt);
-    const group = item.group.replace(/_yopildi.*/i, "");
-    lines.push({ subject, type: fmtType(item.type), group, plan, sitePlan, done, noAtt, closed, queued, left, first, last, sirtqi: isSirtqi(group), finished: !closed && plan > 0 && left === 0 });
-  }
-  // the group taught in this app is not in the site's load: finished lessons here, planned hours entered by hand
-  const courseDone = sessions.filter((s) => s.finished_at && s.date >= start).length * HOURS_PER_PARA;
-  const coursePlanHours = coursePlan ?? COURSE.planHours;
-  const courseFirst = sessions.map((x) => x.date).filter((d) => d >= start).sort()[0] || "9999-12-31";
-  const course = { subject: COURSE.subject, type: COURSE.type, group: COURSE.group, plan: coursePlanHours, done: courseDone, noAtt: 0, course: true, left: Math.max(0, coursePlanHours - courseDone), first: courseFirst };
-  // its timetable is generated week after week: count as far as the site's schedule reaches (at least two weeks), never past the hours left
-  const ctx = lessonContext(sessions, data, cancelled);
-  const lastSite = (data.lessons || []).reduce((m, l) => (l.date > m ? l.date : m), shiftDay(t, 13));
-  const ahead = [];
-  for (let d = t; d <= lastSite && ahead.length < 60; d = shiftDay(d, 1)) ahead.push(d);
-  course.queued = Math.min(Math.ceil(course.left / HOURS_PER_PARA),
-    entriesFor(ahead, ctx).filter((e) => e.kind === "course" && !paraOver(e, t, now) && !(e.session && e.session.finished_at)).length);
-  lines.unshift(course);
-  // within a subject: by the month its group started, lectures before practicals, then by the first lesson
-  const lectureFirst = (l) => (/ma.ruza/i.test(l.type) ? 0 : 1);
-  const order = [...new Set(lines.map((l) => l.subject))];
-  lines.sort((a, b) => order.indexOf(a.subject) - order.indexOf(b.subject) || a.first.slice(0, 7).localeCompare(b.first.slice(0, 7))
-    || lectureFirst(a) - lectureFirst(b) || a.first.localeCompare(b.first) || a.group.localeCompare(b.group));
-
-  return { lines, independent, course, coursePlanHours };
-}
-const total = (list) => ({
-  plan: list.reduce((n, l) => n + (l.plan || 0), 0), done: list.reduce((n, l) => n + l.done, 0),
-  noAtt: list.reduce((n, l) => n + l.noAtt, 0), left: list.reduce((n, l) => n + (l.left || 0), 0), queued: list.reduce((n, l) => n + (l.queued || 0), 0),
-});
-
-// hours and percentages of the pace: one decimal with a point; whole hours lose the ".0"
-const h1 = (v) => Pace.fmt1(v).replace(/\.0$/, "").replace("-", "−");
-const pct1 = (v) => (v === null || v === undefined ? "–" : Pace.fmt1(v) + "%");
-const signed = (v) => (v === null ? "–" : (v > 0 ? "+" : "") + h1(v));
-const PARA_SLACK = 2;   // within one para of the calendar counts as on plan
 function verdictText(diff) {
   if (diff === null || diff === undefined) return "";
   if (Math.abs(diff) < PARA_SLACK) return "Rejada";
@@ -1299,26 +1314,9 @@ function paceBar(pct, need, cls, soon) {
   if (need !== null && need !== undefined) bar.style.setProperty("--need", Math.max(0, Math.min(100, need)));
   return bar;
 }
-// where today's mark sits on a bar of the whole plan
-const needPct = (sum) => (sum.expected === null || !sum.plan ? null : 100 * sum.expected / sum.plan);
-
-// the teaching load measured against the semester's calendar; the home page shows its summary
-function loadPace(data, sessions, coursePlan, cancelled, semester) {
-  const base = computeLoad(data, sessions, coursePlan, cancelled);
-  const S = Pace.semester(semester.start, semester.weeks, today()), day = S.day, frac = S.frac;
-  const sessionWindow = sessionWindows(base.lines);
-  for (const l of base.lines) {   // a part-time group is measured on its own session
-    const w = sessionWindow(l);
-    if (l.sirtqi) { l.window = w; l.frac = w ? Pace.windowFraction(w.first, w.last, today()) : 0; }
-  }
-  const all = Pace.summary(base.lines, frac);
-  const lecturesFirst = (a, b) => /ma.ruza/i.test(b[0]) - /ma.ruza/i.test(a[0]);
-  const types = [...Pace.byType(base.lines)].sort(lecturesFirst).map(([type, list]) => ({ type, sum: Pace.summary(list, frac), est: list.some((l) => l.course && l.plan) }));
-  return { ...base, frac, day, days: S.total, daysLeft: S.left, week: S.week, weeks: S.weeks, end: S.end, all, types,
-    weekly: Pace.weekly(all.held, all.left, day, S.total), est: base.course.plan ? "~" : "" };
-}
 
 async function loadView() {
+  const show = painter(loadView, null);   // paints only while this is still the page
   const [{ data }, { sessions }, { hours: coursePlan }, { items: cancelledList }, semester] = await Promise.all([api("GET", "/api/oxu"), api("GET", "/api/sessions"), api("GET", "/api/course-plan"), api("GET", "/api/cancelled"), api("GET", "/api/semester")]);
   const cancelled = new Set(cancelledList.map((c) => cancelKey(c.date, c.para, c.subject)));
   const load = data && data.load;
@@ -1339,6 +1337,7 @@ async function loadView() {
     h("td", { class: "num" }, planNode ?? hrs(l.plan)),
     h("td", { class: "num" + quiet(l.done), text: hrs(l.done) }),
     h("td", { class: "num" + quiet(l.noAtt), text: l.noAtt ? hrs(l.noAtt) : "–" }),
+    sums.unknown ? h("td", { class: "num" + quiet(l.unknown), title: l.unknown ? "Sinxronlangandan keyin o'tgan: davomati olinganmi, noma'lum" : null, text: l.unknown ? hrs(l.unknown) : "–" }) : null,
     h("td", { class: "num" + quiet(l.left), text: hrs(l.left) }),
     h("td", { class: "num" + quiet(l.queued), title: l.queued ? l.queued + " ta dars jadvalda, hali o'tilmagan" : null, text: l.queued ? hrs(l.queued * HOURS_PER_PARA) : "–" }),
     h("td", { class: "w-rate" }, rate(l, sum)),
@@ -1395,7 +1394,7 @@ async function loadView() {
         sums.queued ? h("span", {}, h("i", { class: "k-soon" }), "Jadvalda " + hrs(sums.queued * HOURS_PER_PARA) + " soat") : null,
         need === null ? null : h("span", {}, h("i", { class: "k-need" }), "Bugun bo'lishi kerak " + est + pct1(need))),
       h("div", { class: "pace-sums" },
-        sum("O'tildi", h1(all.held), sums.noAtt ? "shundan " + hrs(sums.noAtt) + " soat davomatsiz" : null),
+        sum("O'tildi", h1(all.held), sums.noAtt || sums.unknown ? "shundan " + [sums.noAtt ? hrs(sums.noAtt) + " soat davomatsiz" : "", sums.unknown ? hrs(sums.unknown) + " soat noma'lum" : ""].filter(Boolean).join(", ") : null),
         sum("Qoldi", est + h1(all.left), sums.queued ? "shundan jadvalda " + hrs(sums.queued * HOURS_PER_PARA) + " soat" : null),
         sum("Jami reja", est + h1(all.plan), null)),
       h("p", { class: "pace-split muted" }, "Tizim " + hrs(site.done + site.noAtt) + " / " + hrs(site.plan) + " soat · Kurs, " + COURSE.group + " " + hrs(course.done) + " / " + est + hrs(course.plan) + " soat ", course.plan ? chip("Taxminiy") : null)));
@@ -1436,7 +1435,7 @@ async function loadView() {
     h("ul", { class: "plain facts" }, facts.map(([kind, text]) => h("li", { class: kind || null }, h("i", { class: "fact-dot" }), typeof text === "string" ? h("span", { text }) : text)))) : null;
 
   const extra = Object.entries(independent);
-  show(pageHead("Yuklama", [load.semester, load.position].filter(Boolean).join(" · ")),
+  show(withAge(data, "unsaved", "Shundan keyin o'tgan darslar holati noma'lum.", pageHead("Yuklama", [load.semester, load.position].filter(Boolean).join(" · "))),
     h("p", { class: "sem-line" }, h("b", { text: P.day + "-ish kuni" }), " / " + P.days + " · " + (P.week ? P.week + "-hafta / " + P.weeks + " · " : "") + shortDate(semester.start) + " – " + shortDate(P.end) + " · ", h("a", { href: "#/kabinet", text: "o'zgartirish" })),
     !load.start ? h("p", { class: "sub" }, "To'liq hisob uchun ", h("a", { href: "#/kabinet", text: "Kabinetda qayta sinxronlang" }), ": o'tilgan soatlar butun semestr jadvalidan olinadi.") : null,
     hero,
@@ -1444,14 +1443,25 @@ async function loadView() {
     factCard,
     h("div", { class: "card flush" }, h("table", { class: "load" },
       h("thead", {}, h("tr", {}, h("th", { scope: "col", text: "Fan va guruh" }), h("th", { scope: "col", text: "Turi" }),
-        [["Reja"], ["O'tilgan"], ["Davomatsiz"], ["Qolgan"], ["Jadvalda", "Jadvalda bor, hali o'tilmagan darslar, soatda"]].map(([x, tip]) => h("th", { scope: "col", class: "num", title: tip || null, text: x })),
+        [["Reja"], ["O'tilgan"], ["Davomatsiz"], sums.unknown ? ["Noma'lum", "Dars o'tgan, lekin sinxronlangandan keyin: davomati olinganmi, noma'lum"] : null, ["Qolgan"], ["Jadvalda", "Jadvalda bor, hali o'tilmagan darslar, soatda"]].filter(Boolean).map(([x, tip]) => h("th", { scope: "col", class: "num", title: tip || null, text: x })),
         h("th", { scope: "col", class: "w-rate", text: "Bajarilishi" }),
         h("th", { scope: "col", class: "num", title: "O'tilgan soat minus shu kungacha o'tilishi kerak bo'lgan soat. Tugagan va yopilgan guruhlarda ko'rsatilmaydi.", text: "Farq" }))),
       groups)),
     h("div", { class: "notes" },
       extra.length ? h("p", {}, h("b", { text: "Mustaqil ta'lim: " + hrs(extra.reduce((n, [, v]) => n + v, 0)) + " soat" }), " (" + extra.map(([n, v]) => n + " " + hrs(v)).join(", ") + "). Jadvalga kirmaydi va hisobga qo'shilmagan.") : null,
-      h("p", { text: "Farq: o'tilgan soat minus shu kungacha kerak bo'lgani, reja × (" + P.day + " / " + P.days + " ish kuni): reja semestrning ish kunlariga (dushanba–shanba, yakshanbasiz) teng bo'lingan deb olinadi; bu ilovaning hisobi, sayt raqami emas. Kunduzgi guruhlar butun semestr bo'yicha, sirtqi guruhlar (S1-KT-22 kabi) o'z o'qish davri bo'yicha o'lchanadi: birinchi darsidan jadvaldagi oxirgi darsigacha, kamida 3 hafta, ish kunlarida. Yopilgan guruhlar taqqoslashga kirmaydi; tugagan guruhlar kiradi, lekin ularning qatorida farq ko'rsatilmaydi. Bajarilishi chizig'ida to'q qism o'tilgani, yo'l-yo'l qism jadvaldagi hali o'tilmagan darslar, tik chiziqcha bugungi kerakli nuqta." }),
-      h("p", { text: "1 para = 2 soat. O'tilgan soatlar dars jadvalidan hisoblanadi, sayt bu raqamni bermaydi. Davomatsiz: dars vaqti o'tgan, lekin saytda davomat saqlanmagan. Jadvalda: dars jadvalda bor (jadvaldagi och rangli kartalar), lekin hali o'tilmagan, soatda. Yopilgan guruhlarda reja o'tilgan soatga teng olingan. " + COURSE.group + " saytdagi yuklamada yo'q: rejasi taxminiy, o'tilgani shu ilovadagi tugatilgan darslardan." })));
+      h("details", { class: "fold-line", "data-key": "how-load" }, h("summary", { text: "Qanday hisoblanadi?" }),
+        h("dl", { class: "defs" }, [
+          ["O'tilgan soat", "Dars jadvalidan hisoblanadi: 1 para = 2 soat. Sayt bu raqamni bermaydi."],
+          ["Farq", "O'tilgan soat minus shu kungacha kerak bo'lgan soat. Kerakli soat = reja × (o'tgan ish kunlari ÷ semestr ish kunlari). Bu ilovaning hisobi, sayt raqami emas."],
+          ["Ish kunlari", "Dushanba–shanba, yakshanbasiz. Semestr boshi va haftalar soni Kabinetda."],
+          ["Davomatsiz", "Dars vaqti o'tgan, lekin saytda davomat saqlanmagan."],
+          ["Noma'lum", "Dars oxirgi sinxronlashdan keyin o'tgan: davomati saytda olinganmi, hozircha noma'lum. O'tilgan soatga kiradi."],
+          ["Jadvalda", "Jadvalda bor (och rangli kartalar), lekin hali o'tilmagan darslar, soatda."],
+          ["Sirtqi guruhlar", "S1-KT-22 kabi guruhlar o'z o'qish davri bo'yicha o'lchanadi: birinchi darsidan jadvaldagi oxirgi darsigacha, kamida 3 hafta."],
+          ["Yopilgan guruhlar", "Rejasi o'tilgan soatga teng olingan, taqqoslashga kirmaydi. Tugagan guruhlar kiradi, lekin qatorida farq ko'rsatilmaydi."],
+          [COURSE.group, "Saytdagi yuklamada yo'q: rejasi taxminiy (~), o'tilgani shu ilovadagi tugatilgan darslardan."],
+          ["Bajarilishi chizig'i", "To'q qism o'tilgani, yo'l-yo'l qism jadvaldagi hali o'tilmagan darslar, tik chiziqcha bugungi kerakli nuqta."],
+        ].map(([term, text]) => [h("dt", { text: term }), h("dd", { text })])))));
 }
 
 /* ------------------------------------------------------------ cabinet (digital.oxu.uz) */
@@ -1468,7 +1478,7 @@ window.addEventListener("message", async (e) => {
   let res = null;
   try { res = await api("POST", "/api/oxu/sync", { cookie: m.cookie }); } catch (err) {
     // the site tab hands over its cookie on every page, also before the login: that one is no error
-    const early = err.message.startsWith("Sessiya tugagan");   // the server's text for a cookie the site does not accept
+    const early = err.code === "oxu_session";   // a cookie the site does not accept (yet)
     window.postMessage({ source: "attendance-app", type: "result", ok: false, quiet: early }, location.origin);
     say(early ? "Sayt hali kirishni tasdiqlamadi, kutilmoqda…" : err.message, early, early);
     return;
@@ -1481,8 +1491,8 @@ window.addEventListener("message", async (e) => {
 window.postMessage({ source: "attendance-app", type: "ready" }, location.origin);
 
 async function cabinetView() {
-  const [{ data, synced_at }, st, { sessions }, { hours: coursePlan }, { items: cancelledList }, { marks }] = await Promise.all([api("GET", "/api/oxu"), api("GET", "/api/oxu/status"),
-    api("GET", "/api/sessions"), api("GET", "/api/course-plan"), api("GET", "/api/cancelled"), api("GET", "/api/kpi-marks")]);
+  const show = painter(cabinetView, null);   // paints only while this is still the page
+  const [{ data, synced_at }, st, backup] = await Promise.all([api("GET", "/api/oxu"), api("GET", "/api/oxu/status"), api("GET", "/api/backup")]);
   const finish = async (res) => {
     if (!res) return cabinetView();
     await cabinetView(); refreshBadge();
@@ -1542,30 +1552,18 @@ async function cabinetView() {
         if (await act(() => api("DELETE", "/api/oxu/cookie"))) cabinetView();
       } })));
   const head = pageHead("Kabinet", synced_at ? "digital.oxu.uz ma'lumotlari" : "Hali sinxronlanmagan");
-  const semesterCard = await semesterForm();
+  const semesterCard = [await semesterForm(), backupCard(backup)];
   if (!data) return show(head, form, semesterCard, h("p", { class: "card empty", text: "Jadval, yuklama va KPI o'z bo'limlarida ko'rinadi. Yuqorida birinchi sinxronlashni bajaring." }));
 
-  // an overview: every synced section, one click away; the app's own group counts like the site's
-  const t = today(), clock = nowTime(), monday = shiftDay(t, -((dowOf(t) + 6) % 7));
-  const cancelled = new Set(cancelledList.map((c) => cancelKey(c.date, c.para, c.subject)));
-  const ctx = lessonContext(sessions, data, cancelled);
-  const weekLessons = entriesFor([...Array(7).keys()].map((i) => shiftDay(monday, i)), ctx).length;
-  const monthDays = [];
-  for (let d = t.slice(0, 8) + "01"; d <= t; d = shiftDay(d, 1)) monthDays.push(d);
-  const monthHours = entriesFor(monthDays, ctx).filter((e) => paraOver(e, t, clock)).length * HOURS_PER_PARA;
-  const load = data.load ? computeLoad(data, sessions, coursePlan, cancelled) : null;
-  const monthName = capital(MONTHS[Number(t.slice(5, 7)) - 1]);
-  const bands = (data.kpi && data.kpi.bands) || [];
-  const score = bands.reduce((n, b) => n + (Number(b.score) || 0), 0);
-  const bonus = ustamaFigure(data, marks, t.slice(0, 7));
-  const card = (href, label, value, note) => h("a", { class: "tile link", href }, h("span", { class: "label", text: label }), h("b", { text: String(value) }), h("span", { class: "note", text: note }));
-  show(head, form,
-    h("div", { class: "overview" },
-      card("#/jadval", "Dars jadvali", weekLessons + " ta dars", "Shu hafta, " + COURSE.group + " bilan"),
-      card("#/yuklama", "Yuklama", hrs(monthHours) + " soat", load ? monthName + "da o'tildi · semestr " + hrs(total(load.lines).plan) + " soat" : monthName + "da o'tildi"),
-      card("#/ilmiy-kpi", "Ilmiy KPI", score.toFixed(2) + " ball", ((data.kpi && data.kpi.papers.length) || 0) + " ta ish"),
-      card("#/ustama", "Ustama", bonus.known ? hrs(bonus.value) + "%" : "–", monthName + (bonus.onSite ? ", saytda tasdiqlangan" : ", belgilangan bandlardan"))),
-    semesterCard);
+  show(head, form, semesterCard);
+}
+// when the database was last copied; a copy is made by `attendance backup` (see README), not by this page
+function backupCard(b) {
+  const age = b.last ? (Date.now() / 1000 - b.last) / 86400 : null;
+  const text = age === null ? "Zaxira nusxa hali olinmagan." : "Oxirgi zaxira nusxa: " + stamp(b.last) + (age > 2 ? " (" + Math.floor(age) + " kun oldin)" : "") + ".";
+  return h("section", { class: "card", "aria-labelledby": "backup-h" }, h("h2", { id: "backup-h", text: "Zaxira nusxa" }),
+    h("p", { class: "sub" + (age === null || age > 2 ? " warn-text" : ""), text: text }),
+    h("p", { class: "sub", text: "Ma'lumotlar bazasi serverda yagona nusxa. Kundalik nusxa uchun README dagi «Backup and restore» bo'limiga qarang." }));
 }
 // the calendar the teaching load's pace is measured against; the site does not give it
 async function semesterForm() {
@@ -1585,33 +1583,49 @@ async function semesterForm() {
     h("p", { class: "sub", text: "Yuklamadagi \"shu kungacha qancha o'tilishi kerak edi\" hisobi shu ish kunlariga qarab olinadi: haftada 6 kun, dushanbadan shanbagacha." }),
     h("form", { class: "semester-form", onsubmit: async (e) => {
         e.preventDefault();
-        if (await act(() => api("PUT", "/api/semester", { start: start.input.value, weeks: weeks.value.trim() }))) say("Saqlandi", true);
+        if (await act(() => api("PUT", "/api/semester", { start: start.input.value, weeks: weeks.value.trim() }))) { await loadSemester(); say("Saqlandi", true); }
       } },
       field("Boshlanishi", start), field("Haftalar soni", weeks),
       h("button", { type: "submit", class: "primary", text: "Saqlash" })),
-    endLine);
+    endLine,
+    h("div", { class: "new-semester" },
+      h("p", { class: "sub", text: "Semestr tugadimi? Yangisini boshlang: talabalar arxivga o'tadi, darslar va qarzlar «Oldingi semestrlar» ostida qoladi." }),
+      h("button", { type: "button", text: "Yangi semestr", onclick: () => newSemesterSheet(sem) })));
+}
+
+// the next semester: new dates, every student archived, the record kept (and backed up first)
+function newSemesterSheet(sem) {
+  const guess = Pace.semester(sem.start, sem.weeks, sem.start).end;
+  const start = dateField("start", shiftDay(guess, 7 * 6));   // a winter break of about six weeks
+  const weeks = h("input", { name: "weeks", type: "text", inputmode: "numeric", value: String(sem.weeks), autocomplete: "off", required: true });
+  const hours = h("input", { name: "hours", type: "text", inputmode: "numeric", value: "", placeholder: "o'zgarmaydi", autocomplete: "off" });
+  openSheet("Yangi semestr", h("form", { class: "stack", onsubmit: async (e) => {
+      e.preventDefault();
+      if (!(await ask("Yangi semestr " + dayText(start.input.value) + " dan boshlansinmi? Hamma talaba arxivga o'tadi; oldin zaxira nusxa olinadi.", "Boshlash", true))) return;
+      const res = await act(() => api("POST", "/api/semester/new", { start: start.input.value, weeks: weeks.value.trim(), plan_hours: hours.value.trim() || null }));
+      if (!res) return;
+      sheetBox.close();
+      await loadSemester();
+      say("Yangi semestr boshlandi" + (res.backup ? ", zaxira nusxa olindi" : "") + ". Talabalarni «Talabalar» sahifasida qo'shing yoki arxivdan qaytaring.", true, true);
+      route();
+    } },
+    h("div", { class: "pair" }, field("Boshlanishi", start), field("Haftalar soni", weeks)),
+    field(COURSE.group + " reja soati", hours),
+    h("ul", { class: "plain facts" },
+      h("li", {}, h("span", { text: "Hamma talaba arxivga o'tadi: o'chirilmaydi, tarixi va qarzlari saqlanadi." })),
+      h("li", {}, h("span", { text: "Oldingi darslar va qarzlar «Oldingi semestrlar» ostida ko'rinadi." })),
+      h("li", {}, h("span", { text: "Guruh, fan va kunlar o'zgarsa, ularni web/lib/rules.js dagi COURSE da o'zgartirish kerak." }))),
+    h("div", { class: "dialog-actions" }, h("button", { type: "button", text: "Yopish", onclick: () => sheetBox.close() }), h("button", { type: "submit", class: "primary", text: "Boshlash" }))));
 }
 
 /* ------------------------------------------------------------ scientific KPI */
-function needSync(title) { return show(pageHead(title), h("p", { class: "card empty" }, "Ma'lumot hali yo'q. ", h("a", { href: "#/kabinet", text: "Kabinetda sinxronlang" }))); }
-
-// stages a work goes through before it can be uploaded; editable per item
-function workSteps(band) {
-  if (/patent|dgu/i.test(band)) return ["Hujjatlar tayyorlandi", "Topshirildi", "Guvohnoma olindi"];
-  if (/monografiya|darslik|qo.llanma/i.test(band)) return ["Yozildi", "Taqrizdan o'tdi", "Chop etildi"];
-  if (/maqola|tezis|anjuman/i.test(band)) return ["Yozildi", "Topshirildi", "Qabul qilindi", "Chop etildi"];
-  return ["Boshlandi", "Tayyor"];
-}
-const normTitle = (t) => (t || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
-function sameWork(a, b) {
-  const x = normTitle(a), y = normTitle(b);
-  return x === y || (Math.min(x.length, y.length) >= 15 && (x.includes(y) || y.includes(x)));
-}
+function needSync(title, show) { return show(pageHead(title), h("p", { class: "card empty" }, "Ma'lumot hali yo'q. ", h("a", { href: "#/kabinet", text: "Kabinetda sinxronlang" }))); }
 
 async function kpiView() {
+  const show = painter(kpiView, null);   // paints only while this is still the page
   const [{ data }, { works }, { steps: customSteps }] = await Promise.all([api("GET", "/api/oxu"), api("GET", "/api/kpi-works"), api("GET", "/api/kpi-marks")]);
   const kpi = data && data.kpi;
-  if (!kpi) return needSync("Ilmiy KPI");
+  if (!kpi) return needSync("Ilmiy KPI", show);
   const score = kpi.bands.reduce((n, b) => n + (Number(b.score) || 0), 0);
   const approved = kpi.papers.filter((p) => /tasdiq/i.test(p.status)).length;
   const required = kpi.bands.filter((b) => b.min);
@@ -1666,7 +1680,7 @@ async function kpiView() {
     h("td", { class: "num", text: b.weight }), h("td", { class: "num", text: b.count }), h("td", { class: "num strong", text: b.score }), h("td", { class: "num muted", text: b.limit }));
   const others = kpi.papers.filter((p) => !works.some((w) => sameWork(p.title, w.title)));
 
-  show(pageHead("Ilmiy KPI", "Ishlaringiz jarayoni va to'plangan ball", h("button", { type: "button", class: "primary", onclick: addWork }, icon("plus"), "Yangi ish")),
+  show(withAge(data, "kpi", "Saytdagi keyingi o'zgarishlar bu yerda ko'rinmaydi.", pageHead("Ilmiy KPI", "Ishlaringiz jarayoni va to'plangan ball", h("button", { type: "button", class: "primary", onclick: addWork }, icon("plus"), "Yangi ish"))),
     h("div", { class: "tiles" }, tile("To'plangan ball", score.toFixed(2)), tile("Jarayonda", active.length), tile("Yuklashga tayyor", ready.length), tile("Saytda tasdiqlangan", approved),
       required.length ? tile("Minimal talablar", required.filter((b) => Number(b.count) >= Number(b.min)).length + " / " + required.length, "bajarilgan") : null),
     h("section", { class: "card flush", "aria-labelledby": "works-h" }, h("h2", { id: "works-h", class: "card-title", text: "Ishlarim" }),
@@ -1687,53 +1701,13 @@ async function kpiView() {
 // the site's status is "Taxminiy Oy davom etmoqda -- ...": a short label, then an explanation
 function monthState(m) { const [label, ...rest] = (m.status || "").split(/\s+/); return { label: label || "–", note: rest.join(" ").replace(/\s*--\s*/g, ": ") }; }
 
-// "2026 — Oktabr" -> "2026-10"
-function periodKey(label) {
-  const m = /(\d{4})[^\p{L}]+(\p{L}+)/u.exec(label || "");
-  const i = m ? MONTHS.indexOf(m[2].toLowerCase()) : -1;
-  return i < 0 ? "" : m[1] + "-" + String(i + 1).padStart(2, "0");
-}
-function periodTitle(key) { const [y, m] = key.split("-").map(Number); return capital(MONTHS[m - 1]) + " " + y; }
 const kf = { month: "" };
 
-// starting stages; each item's list can be edited on the page
-function defaultSteps(title) {
-  if (/maqola/i.test(title)) return ["Yozildi", "Topshirildi", "Tizimga yuklandi"];
-  if (/ochiq dars/i.test(title)) return ["Rejalashtirildi", "O'tildi", "Tizimga yuklandi"];
-  if (/kontent/i.test(title)) return ["Tayyorlandi", "Tizimga yuklandi"];
-  if (/metod/i.test(title)) return ["Tayyorlandi", "Joriy etildi", "Joylashtirildi"];
-  if (/shogird|shogirt/i.test(title)) return ["Rejalashtirildi", "Bajarildi", "Tizimga yuklandi"];
-  return [];
-}
-
-// graded by others at the end of the month: nothing the teacher can tick
-const GRADED_BY_OTHERS = /ma.suliyati|moddiy texnik|rektor ustamasi/i;
-// the month's own items that are neither ticked nor graded yet, and the days left to finish them
-const SKIPPED = -1;   // a progress value: the item cannot be done this month
-function ustamaOpen(data, marks, month, progress) {
-  const periods = (data && data.periods) || [];
-  const sitePeriod = periods.find((p) => periodKey(p.label) === month), template = sitePeriod || periods[periods.length - 1];
-  const ticked = new Set(marks.filter((m) => m.period === month).map((m) => m.item));
-  const skipped = new Set((progress || []).filter((p) => p.period === month && p.step === SKIPPED).map((p) => p.item));
-  const open = ((template && template.items) || []).filter((i) => Number(i.max) > 0 && !GRADED_BY_OTHERS.test(i.title) && !ticked.has(i.title) && !skipped.has(i.title) && !(sitePeriod && i.graded > 0));
-  const [y, m, d] = today().split("-").map(Number);
-  return { count: open.length, points: open.reduce((n, i) => n + Number(i.max), 0), days: new Date(y, m, 0).getDate() - d };
-}
-// the month's figure as the Ustama page heads it: approved by the site once it has opened the month, else what the ticked items would bring
-function ustamaFigure(data, marks, month) {
-  const periods = (data && data.periods) || [];
-  const sitePeriod = periods.find((p) => periodKey(p.label) === month), template = sitePeriod || periods[periods.length - 1];
-  const items = (template && template.items) || [];
-  const ticked = new Set(marks.filter((m) => m.period === month).map((m) => m.item));
-  const pending = items.filter((i) => Number(i.max) > 0 && !GRADED_BY_OTHERS.test(i.title) && ticked.has(i.title) && !(sitePeriod && i.graded > 0)).reduce((n, i) => n + Number(i.max), 0);
-  const approved = sitePeriod ? items.reduce((n, i) => n + (Number(i.value) || 0), 0) : 0;
-  return { onSite: !!sitePeriod, known: items.length > 0, approved, pending, value: sitePeriod ? approved : pending };
-}
-
 async function monthsView() {
+  const show = painter(monthsView, null);   // paints only while this is still the page
   const [{ data }, { marks, progress, steps: customSteps }] = await Promise.all([api("GET", "/api/oxu"), api("GET", "/api/kpi-marks")]);
   const periods = (data && data.periods) || [], months = (data && data.months) || [];
-  if (!periods.length && !months.length) return needSync("Ustama");
+  if (!periods.length && !months.length) return needSync("Ustama", show);
 
   const thisMonth = today().slice(0, 7);
   const keys = [...new Set([thisMonth, ...periods.map((p) => periodKey(p.label)).filter(Boolean)])].sort().reverse();
@@ -1768,8 +1742,7 @@ async function monthsView() {
   const saveStep = async (i, step) => {
     const last = stepsOf(i).length;
     const ok = await act(async () => {
-      await api("PUT", "/api/kpi-progress", { period: month, item: i.title, step });
-      if ((step === last) !== ticked.has(i.title)) await api("PUT", "/api/kpi-marks", { period: month, item: i.title, done: step === last });
+      await api("PUT", "/api/kpi-progress", { period: month, item: i.title, step, done: step === last });   // one request: the stage and the tick
       return true;
     });
     if (ok) monthsView();
@@ -1800,8 +1773,7 @@ async function monthsView() {
   };
   const skip = async (i, on) => {
     const ok = await act(async () => {
-      await api("PUT", "/api/kpi-progress", { period: month, item: i.title, step: on ? SKIPPED : 0 });
-      if (on && ticked.has(i.title)) await api("PUT", "/api/kpi-marks", { period: month, item: i.title, done: false });
+      await api("PUT", "/api/kpi-progress", { period: month, item: i.title, step: on ? SKIPPED : 0, ...(on ? { done: false } : {}) });
       return true;
     });
     if (ok) { say(on ? "«Bajarib bo'lmaydi» deb belgilandi" : "Band qaytarildi", true); monthsView(); }
@@ -1857,9 +1829,18 @@ async function monthsView() {
     hits.length ? h("ul", { class: "plain fines" }, hits.map((i) => h("li", {}, title(i), h("b", { class: "minus", text: i.value })))) : null,
     h("details", { class: "fold-line" }, h("summary", { text: onSite ? clean.length + " ta bandda jarima yo'q" : "Sayt hali baholamagan, " + clean.length + " ta band" }),
       h("ul", { class: "plain fines" }, clean.map((i) => h("li", {}, title(i, "muted"), h("span", { class: "muted nowrap", text: "gacha " + i.min }))))));
+  // the site lists the months newest first without a year: count back from this one
+  const monthYears = (() => {
+    let y = Number(today().slice(0, 4)), prev = null;
+    const idx = (m) => MONTHS.indexOf(m.month.split(/\s+/)[0].toLowerCase());
+    const first = months.length ? idx(months[0]) : -1;
+    if (first > Number(today().slice(5, 7)) - 1) y--;   // the newest row is a month of last year
+    return months.map((m) => { const i = idx(m); if (prev !== null && i > prev) y--; prev = i; return y; });
+  })();
+  const spansYears = new Set(monthYears).size > 1;
   const history = months.length ? h("section", { class: "card", "aria-labelledby": "hist-h" }, h("h2", { id: "hist-h", text: "Oylar tarixi" }),
-    h("ul", { class: "plain history" }, months.map((m) => h("li", {},
-      h("span", { class: "strong", text: m.month }), meter(Math.min(100, parseFloat(m.percent) || 0)), h("b", { text: m.percent }),
+    h("ul", { class: "plain history" }, months.map((m, n) => h("li", {},
+      h("span", { class: "strong", text: m.month + (spansYears ? " " + monthYears[n] : "") }), meter(Math.min(100, parseFloat(m.percent) || 0)), h("b", { text: m.percent }),
       h("small", { class: "muted", text: monthState(m).label }))))) : null;
 
   const fill = h("i"), soft = h("i", { class: "soft" });
@@ -1867,7 +1848,7 @@ async function monthsView() {
   soft.style.setProperty("--v", Math.max(0, Math.min(100 - Math.max(0, approved), pending)));
   const sel = h("select", { "aria-label": "Oy", onchange: (e) => { kf.month = e.target.value; monthsView(); } },
     keys.map((k) => h("option", { value: k, selected: k === month, text: periodTitle(k) })));
-  const head = pageHead("Ustama", "Oylik ustama foizi va uning bandlari", sel);
+  const head = withAge(data, "periods", "Saytdagi keyingi o'zgarishlar bu yerda ko'rinmaydi.", pageHead("Ustama", "Oylik ustama foizi va uning bandlari", sel));
   if (!items.length) return show(head, h("p", { class: "sub" }, "Bandlarni ko'rish uchun ", h("a", { href: "#/kabinet", text: "Kabinetda qayta sinxronlang" }), "."), history);
 
   const left = month === thisMonth ? ustamaOpen(data, marks, month, progress) : null;
@@ -1892,23 +1873,6 @@ async function monthsView() {
 }
 
 /* ------------------------------------------------------------ notifications */
-// A notice lists its lessons one per line, "10.11.2026, 6-para: Subject · Group". Older notices joined them with "; "
-// and ended with "va yana N ta"; both are read, so every notice shows its lessons as separate rows.
-function noteLessons(n) {
-  const lines = (n.body || "").includes("\n") ? n.body.split("\n") : (n.body || "").split("; ");
-  const list = [];
-  let more = 0;
-  for (let line of lines) {
-    line = line.trim();
-    const tail = /\s+va yana (\d+) ta$/.exec(line);
-    if (tail) { more = Number(tail[1]); line = line.slice(0, tail.index); }
-    const m = /^(\d{2})\.(\d{2})\.(\d{4}), (\d+)-para: (.+)$/.exec(line);
-    if (!m) return { list: [], more: 0 };   // not a lesson notice: the plain text is shown
-    const cut = m[5].lastIndexOf(" · ");
-    list.push({ iso: m[3] + "-" + m[2] + "-" + m[1], para: Number(m[4]), subject: cut < 0 ? m[5] : m[5].slice(0, cut), group: cut < 0 ? "" : m[5].slice(cut + 3) });
-  }
-  return { list, more };
-}
 const NOTE_ICONS = { lesson_added: "plus", lesson_removed: "x", attendance_missing: "alert" };
 const canNotify = "Notification" in window;
 function lastShown(set) {
@@ -1938,6 +1902,7 @@ async function lessonReminder() {
   if (!canNotify || Notification.permission !== "granted") return;
   const t = today(), now = nowTime(), mins = (x) => Number(x.slice(0, 2)) * 60 + Number(x.slice(3, 5));
   try {
+    if (!semesterNow.loaded) await loadSemester();
     if (!reminderCtx || reminderCtx.day !== t) {
       const [{ data }, { sessions }, { items }] = await Promise.all([api("GET", "/api/oxu"), api("GET", "/api/sessions"), api("GET", "/api/cancelled")]);
       reminderCtx = { day: t, ctx: lessonContext(sessions, data, new Set(items.map((c) => cancelKey(c.date, c.para, c.subject)))) };
@@ -1962,6 +1927,7 @@ setInterval(lessonReminder, 60000);
 lessonReminder();
 
 async function notesView() {
+  const show = painter(notesView, null);   // paints only while this is still the page
   const { items, unread } = await api("GET", "/api/notifications");
   const permission = canNotify ? Notification.permission : "unsupported";
   const enable = h("button", { type: "button", class: "primary", text: "Chrome bildirishnomalarini yoqish", onclick: async () => {
@@ -1995,6 +1961,7 @@ async function notesView() {
 /* ------------------------------------------------------------ home */
 const DAY_SHORT = ["Yak", "Du", "Se", "Chor", "Pay", "Ju", "Sha"];
 async function homeView() {
+  const show = painter(homeView, null);   // paints only while this is still the page
   const [{ data }, { sessions }, { hours: coursePlan }, { items: cancelledList }, status, notes, debts, { works }, { steps: customSteps, marks, progress }, semester, { students }] = await Promise.all([
     api("GET", "/api/oxu"), api("GET", "/api/sessions"), api("GET", "/api/course-plan"), api("GET", "/api/cancelled"), api("GET", "/api/oxu/status"),
     api("GET", "/api/notifications"), api("GET", "/api/retakes"), api("GET", "/api/kpi-works"), api("GET", "/api/kpi-marks"), api("GET", "/api/semester"), api("GET", "/api/students"), loadPlans()]);
@@ -2010,7 +1977,7 @@ async function homeView() {
     const times = PARA_TIMES[e.para], isNow = times && times[0] <= now && now <= times[1];
     return h("li", { class: "day-row" + (isNow ? " now" : "") + (paraOver(e, t, now) ? " over" : "") },
       h("div", { class: "day-time" }, h("b", { text: e.para + "-para" }), times ? h("small", { text: times[0] }) : null),
-      e.kind === "site" ? siteCard(e.lesson, ctx.unsaved, colorOf(e.lesson.subject), e) : courseCard(e, colorOf(COURSE.subject)));
+      e.kind === "site" ? siteCard(e.lesson, ctx, colorOf(e.lesson.subject), e) : courseCard(e, colorOf(COURSE.subject)));
   };
   const upcoming = nextEntry(ctx, t, now);
   const P = data && data.load ? loadPace(data, sessions, coursePlan, cancelled, semester) : null;
@@ -2021,6 +1988,7 @@ async function homeView() {
   const start = (data && data.load && data.load.start) || "";
   const gaps = (ctx.unsavedList || []).filter((l) => l.date >= start && lessonOver(l) && !cancelled.has(cancelKey(l.date, l.para, l.subject))).length;
   const gapList = courseGaps(ctx, t, now), todo = gapList.length;
+  const unknownSite = ctx.siteLessons.filter((l) => l.date >= start && !cancelled.has(cancelKey(l.date, l.para, l.subject)) && Timetable.siteStatus(l, ctx, t, now) === "unknown").length;
   // preparation: today's lessons still to come and tomorrow's
   const unplanned = entriesFor([t, tomorrow], ctx).filter((e) => !paraOver(e, t, now) && planStage(planOf(e)) === "none").sort((a, b) => a.date.localeCompare(b.date) || a.para - b.para);
   const todayUnplanned = unplanned.filter((e) => e.date === t), tomorrowUnplanned = unplanned.filter((e) => e.date === tomorrow);
@@ -2033,7 +2001,8 @@ async function homeView() {
   const atRisk = students.filter((x) => x.active && x.lessons >= 4 && x.missed / x.lessons >= .25).length;
   const behind = P && P.all.diff !== null && P.all.diff <= -PARA_SLACK ? -P.all.diff : 0;
   const tasks = [   // [link, icon, text]; the alert ones lead
-    syncText ? ["#/kabinet", "alert", syncText] : null,
+    // a sync that was never set up is a choice, not an emergency: it waits under "Keyinroq"
+    syncText && status.state !== "none" ? ["#/kabinet", "alert", syncText] : null,
     todo ? ["#/jadval", "alert", COURSE.group + ": " + todo + " ta darsda davomat olinmagan"] : null,
     gaps ? ["#/jadval", "alert", "Saytda " + gaps + " ta darsda davomat olinmagan"] : null,
     todayUnplanned.length ? ["#/reja", "alert", "Bugun " + paras(todayUnplanned) + ": reja yo'q"] : null,
@@ -2043,8 +2012,9 @@ async function homeView() {
     tomorrowUnplanned.length ? ["#/reja", "clock", "Ertangi " + paras(tomorrowUnplanned) + ": reja yo'q"] : null,
     behind ? ["#/yuklama", "clock", "Yuklama rejadan " + P.est + h1(behind) + " soat orqada"] : null,
     bonus.count && bonus.days > 7 ? ["#/ustama", "clock", "Ustama: " + bonus.count + " ta band ochiq, oy tugashiga " + bonus.days + " kun"] : null,
-    debts.owed ? ["#/qarzlar", "clock", debts.owed + " ta qarz topshirilmagan"] : null,
+    thisSemester(debts).owed ? ["#/qarzlar", "clock", thisSemester(debts).owed + " ta qarz topshirilmagan"] : null,
     atRisk ? ["#/talabalar", "clock", atRisk + " ta talaba darslarning 25% dan ko'pini qoldirgan"] : null,
+    syncText && status.state === "none" ? ["#/kabinet", "clock", "Sinxronlash sozlanmagan: sayt ma'lumotlari yangilanmaydi"] : null,
     ready ? ["#/ilmiy-kpi", "check", ready + " ta ish saytga yuklashga tayyor"] : null,
   ].filter(Boolean);
   const urgent = tasks.filter((x) => x[1] === "alert"), later = tasks.filter((x) => x[1] !== "alert");
@@ -2135,7 +2105,7 @@ async function homeView() {
   const semMark = h("div", { class: "sem-mark" }, h("p", {}, h("b", { text: S.week ? S.week + "-hafta" : "Semestr boshlanmagan" }),
       S.week ? " / " + S.weeks + " · " + S.day + "-ish kuni / " + S.total + " · " + S.left + " kun qoldi" : ""),
     paceBar(100 * S.frac, null, "time"));
-  show(pageHead("Bugun", capital(longDay(t)), semMark),
+  show(withAge(data, "unsaved", "Shundan keyin o'tgan darslar holati noma'lum.", pageHead("Bugun", capital(longDay(t)), semMark)),
     h("div", { class: "lead" },
       todayCard,
       h("section", { class: "card attention", "aria-labelledby": "todo-h" }, h("h2", { id: "todo-h" }, "E'tibor talab qiladi", tasks.length ? h("span", { class: "badge" + (urgent.length ? "" : " calm"), text: String(urgent.length || tasks.length) }) : null),
@@ -2146,7 +2116,7 @@ async function homeView() {
       stat("#/ustama", "Ustama, " + monthName.toLowerCase(), bonusNow.known ? hrs(bonusNow.value) + "%" : "–", bonusNow.known ? (bonusNow.onSite ? "saytda tasdiqlangan" : "belgilangan bandlardan") + (bonus.count ? " · " + bonus.count + " ta ochiq" : "") : "Sinxronlanmagan"),
       stat("#/ilmiy-kpi", "Ilmiy ball", score.toFixed(2), works.length ? works.length + " ta ish kuzatuvda" : null),
       stat("#/yuklama", monthName + "da o'tildi", hrs(monthHours) + " soat", P ? "semestrda " + h1(P.all.held) + " soat" : null),
-      stat("#/jadval", "Olinmagan davomat", todo + gaps, todo + gaps ? [todo ? COURSE.group + ": " + todo : null, gaps ? "saytda: " + gaps : null].filter(Boolean).join(" · ") : "hammasi olingan")));
+      stat("#/jadval", "Olinmagan davomat", todo + gaps, [todo ? COURSE.group + ": " + todo : null, gaps ? "saytda: " + gaps : null, unknownSite ? unknownSite + " ta noma'lum" : null].filter(Boolean).join(" · ") || "hammasi olingan")));
 }
 
 /* ------------------------------------------------------------ theme */
@@ -2170,7 +2140,7 @@ function renderPalette() {
   const q = paletteInput.value.trim().toLowerCase();
   const shown = paletteItems.filter((x) => !q || x.text.toLowerCase().includes(q)).slice(0, 8);
   paletteAt = Math.min(paletteAt, Math.max(0, shown.length - 1));
-  paletteList.replaceChildren(...(shown.length ? shown.map((x, i) => h("li", {}, h("a", { href: x.href, class: i === paletteAt ? "on" : null, onclick: () => palette.close() }, h("span", { text: x.text }), h("small", { class: "muted", text: x.kind }))))
+  paletteList.replaceChildren(...(shown.length ? shown.map((x, i) => h("li", {}, h("a", { href: x.href || "#", class: i === paletteAt ? "on" : null, onclick: (e) => { palette.close(); if (x.run) { e.preventDefault(); x.run(); } } }, h("span", { text: x.text }), h("small", { class: "muted", text: x.kind }))))
     : [h("li", { class: "palette-none", text: "Hech narsa topilmadi" })]));
   return shown;
 }
@@ -2179,11 +2149,31 @@ async function openPalette() {
   paletteItems = PALETTE_PAGES.map(([href, text]) => ({ href, text, kind: "Sahifa" }));
   paletteInput.value = ""; paletteAt = 0; renderPalette(); palette.showModal();
   try { const { students } = await api("GET", "/api/students"); paletteItems.push(...students.map((s) => ({ href: "#/talaba/" + s.id, text: s.name, kind: "Talaba" }))); renderPalette(); } catch (err) { /* pages still work */ }
+  paletteActions().then((list) => { paletteItems.unshift(...list); renderPalette(); }, () => { /* pages and students still work */ });
+}
+// the two things done most often, without leaving the keyboard: take attendance of the lesson that is
+// on (or next today), and read the site now
+async function paletteActions() {
+  const out = [{ text: "Hozir sinxronlash", kind: "Amal", run: async () => {
+    say("Sinxronlanmoqda…", true, true);
+    const res = await act(() => api("POST", "/api/oxu/sync", {}));
+    if (res) { say(res.warnings.length ? "Qisman yangilandi. " + res.warnings.join("; ") : "Ma'lumotlar yangilandi", !res.warnings.length); route(); refreshBadge(); }
+  } }];
+  const [{ sessions }, { data }, { items }] = await Promise.all([api("GET", "/api/sessions"), api("GET", "/api/oxu"), api("GET", "/api/cancelled"), loadPlans()]);
+  const t = today(), ctx = lessonContext(sessions, data, new Set(items.map((c) => cancelKey(c.date, c.para, c.subject))));
+  const next = nextEntry(ctx, t, nowTime());
+  if (next && next.kind === "course" && next.date === t) {
+    const label = next.para + "-para";
+    out.unshift(next.session
+      ? { text: "Davomatni davom ettirish · " + label, kind: "Amal", run: () => { location.hash = "#/dars/" + next.session.id; } }
+      : { text: "Davomatni boshlash · " + label, kind: "Amal", run: () => startCourse(next) });
+  }
+  return out;
 }
 paletteInput.addEventListener("input", () => { paletteAt = 0; renderPalette(); });
 paletteInput.addEventListener("keydown", (e) => {
   if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); const n = renderPalette().length; if (n) { paletteAt = (paletteAt + (e.key === "ArrowDown" ? 1 : n - 1)) % n; renderPalette(); } }
-  if (e.key === "Enter") { e.preventDefault(); const x = renderPalette()[paletteAt]; if (x) { palette.close(); location.hash = x.href; } }
+  if (e.key === "Enter") { e.preventDefault(); const x = renderPalette()[paletteAt]; if (x) { palette.close(); if (x.run) x.run(); else location.hash = x.href; } }
 });
 document.getElementById("open-palette").addEventListener("click", openPalette);
 document.addEventListener("keydown", (e) => {

@@ -1,0 +1,879 @@
+{
+ "data": {
+  "account": "100200",
+  "lessons": [
+   {
+    "date": "2026-09-15",
+    "para": "6",
+    "time": "16:20 - 17:40",
+    "subject": "Ma`lumotlar tuzilmasi va algoritmlar",
+    "type": "Ma`ruza",
+    "group": "K4-ATT-25",
+    "room": "4-o'quv bino, 306-informatika xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168001"
+   },
+   {
+    "date": "2026-09-16",
+    "para": "7",
+    "time": "17:50 - 19:10",
+    "subject": "Tibbiyotda axborot texnologiyalar",
+    "type": "Amaliy",
+    "group": "14-OHI-26",
+    "room": "7-o'quv bino, 202-kompyuter xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168002"
+   },
+   {
+    "date": "2026-09-17",
+    "para": "7",
+    "time": "17:50 - 19:10",
+    "subject": "Tibbiyotda axborot texnologiyalar",
+    "type": "Amaliy",
+    "group": "23-OHI-26_yopildi_24.09.2026",
+    "room": "7-o'quv bino, 202-kompyuter xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168003"
+   },
+   {
+    "date": "2026-09-18",
+    "para": "5",
+    "time": "14:50 - 16:10",
+    "subject": "Ma`lumotlar tuzilmasi va algoritmlar",
+    "type": "Amaliy",
+    "group": "K4-ATT-25",
+    "room": "4-o'quv bino, 306-informatika xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168004"
+   },
+   {
+    "date": "2026-09-22",
+    "para": "6",
+    "time": "16:20 - 17:40",
+    "subject": "Ma`lumotlar tuzilmasi va algoritmlar",
+    "type": "Ma`ruza",
+    "group": "K4-ATT-25",
+    "room": "4-o'quv bino, 306-informatika xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168005"
+   },
+   {
+    "date": "2026-09-23",
+    "para": "7",
+    "time": "17:50 - 19:10",
+    "subject": "Tibbiyotda axborot texnologiyalar",
+    "type": "Amaliy",
+    "group": "14-OHI-26",
+    "room": "7-o'quv bino, 202-kompyuter xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168006"
+   },
+   {
+    "date": "2026-09-24",
+    "para": "7",
+    "time": "17:50 - 19:10",
+    "subject": "Tibbiyotda axborot texnologiyalar",
+    "type": "Amaliy",
+    "group": "23-OHI-26_yopildi_24.09.2026",
+    "room": "7-o'quv bino, 202-kompyuter xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168007"
+   },
+   {
+    "date": "2026-09-25",
+    "para": "5",
+    "time": "14:50 - 16:10",
+    "subject": "Ma`lumotlar tuzilmasi va algoritmlar",
+    "type": "Amaliy",
+    "group": "K4-ATT-25",
+    "room": "4-o'quv bino, 306-informatika xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168008"
+   },
+   {
+    "date": "2026-09-29",
+    "para": "6",
+    "time": "16:20 - 17:40",
+    "subject": "Ma`lumotlar tuzilmasi va algoritmlar",
+    "type": "Ma`ruza",
+    "group": "K4-ATT-25",
+    "room": "4-o'quv bino, 306-informatika xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168009"
+   },
+   {
+    "date": "2026-09-30",
+    "para": "7",
+    "time": "17:50 - 19:10",
+    "subject": "Tibbiyotda axborot texnologiyalar",
+    "type": "Amaliy",
+    "group": "14-OHI-26",
+    "room": "7-o'quv bino, 202-kompyuter xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168010"
+   },
+   {
+    "date": "2026-10-02",
+    "para": "5",
+    "time": "14:50 - 16:10",
+    "subject": "Ma`lumotlar tuzilmasi va algoritmlar",
+    "type": "Amaliy",
+    "group": "K4-ATT-25",
+    "room": "4-o'quv bino, 306-informatika xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168011"
+   },
+   {
+    "date": "2026-10-06",
+    "para": "6",
+    "time": "16:20 - 17:40",
+    "subject": "Ma`lumotlar tuzilmasi va algoritmlar",
+    "type": "Ma`ruza",
+    "group": "K4-ATT-25",
+    "room": "4-o'quv bino, 306-informatika xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168012"
+   },
+   {
+    "date": "2026-10-07",
+    "para": "7",
+    "time": "17:50 - 19:10",
+    "subject": "Tibbiyotda axborot texnologiyalar",
+    "type": "Amaliy",
+    "group": "14-OHI-26",
+    "room": "7-o'quv bino, 202-kompyuter xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168013"
+   },
+   {
+    "date": "2026-10-09",
+    "para": "5",
+    "time": "14:50 - 16:10",
+    "subject": "Ma`lumotlar tuzilmasi va algoritmlar",
+    "type": "Amaliy",
+    "group": "K4-ATT-25",
+    "room": "4-o'quv bino, 306-informatika xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168014"
+   },
+   {
+    "date": "2026-10-13",
+    "para": "6",
+    "time": "16:20 - 17:40",
+    "subject": "Ma`lumotlar tuzilmasi va algoritmlar",
+    "type": "Ma`ruza",
+    "group": "K4-ATT-25",
+    "room": "4-o'quv bino, 306-informatika xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168015"
+   },
+   {
+    "date": "2026-10-14",
+    "para": "7",
+    "time": "17:50 - 19:10",
+    "subject": "Tibbiyotda axborot texnologiyalar",
+    "type": "Amaliy",
+    "group": "14-OHI-26",
+    "room": "7-o'quv bino, 202-kompyuter xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168016"
+   },
+   {
+    "date": "2026-10-16",
+    "para": "5",
+    "time": "14:50 - 16:10",
+    "subject": "Ma`lumotlar tuzilmasi va algoritmlar",
+    "type": "Amaliy",
+    "group": "K4-ATT-25",
+    "room": "4-o'quv bino, 306-informatika xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168017"
+   },
+   {
+    "date": "2026-10-20",
+    "para": "6",
+    "time": "16:20 - 17:40",
+    "subject": "Ma`lumotlar tuzilmasi va algoritmlar",
+    "type": "Ma`ruza",
+    "group": "K4-ATT-25",
+    "room": "4-o'quv bino, 306-informatika xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168018"
+   },
+   {
+    "date": "2026-10-21",
+    "para": "7",
+    "time": "17:50 - 19:10",
+    "subject": "Tibbiyotda axborot texnologiyalar",
+    "type": "Amaliy",
+    "group": "14-OHI-26",
+    "room": "7-o'quv bino, 202-kompyuter xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168019"
+   },
+   {
+    "date": "2026-10-23",
+    "para": "5",
+    "time": "14:50 - 16:10",
+    "subject": "Ma`lumotlar tuzilmasi va algoritmlar",
+    "type": "Amaliy",
+    "group": "K4-ATT-25",
+    "room": "4-o'quv bino, 306-informatika xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168020"
+   },
+   {
+    "date": "2026-10-27",
+    "para": "6",
+    "time": "16:20 - 17:40",
+    "subject": "Ma`lumotlar tuzilmasi va algoritmlar",
+    "type": "Ma`ruza",
+    "group": "K4-ATT-25",
+    "room": "4-o'quv bino, 306-informatika xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168021"
+   },
+   {
+    "date": "2026-10-28",
+    "para": "7",
+    "time": "17:50 - 19:10",
+    "subject": "Tibbiyotda axborot texnologiyalar",
+    "type": "Amaliy",
+    "group": "14-OHI-26",
+    "room": "7-o'quv bino, 202-kompyuter xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168022"
+   },
+   {
+    "date": "2026-10-30",
+    "para": "5",
+    "time": "14:50 - 16:10",
+    "subject": "Ma`lumotlar tuzilmasi va algoritmlar",
+    "type": "Amaliy",
+    "group": "K4-ATT-25",
+    "room": "4-o'quv bino, 306-informatika xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168023"
+   },
+   {
+    "date": "2026-11-02",
+    "para": "6",
+    "time": "16:20 - 17:40",
+    "subject": "Bulutli texnologiyalar",
+    "type": "Ma`ruza",
+    "group": "S1-KT-22, S3-KT-22",
+    "room": "4-o'quv bino, 404-ma`ruzalar xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168024"
+   },
+   {
+    "date": "2026-11-03",
+    "para": "6",
+    "time": "16:20 - 17:40",
+    "subject": "Ma`lumotlar tuzilmasi va algoritmlar",
+    "type": "Ma`ruza",
+    "group": "K4-ATT-25",
+    "room": "4-o'quv bino, 306-informatika xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168025"
+   },
+   {
+    "date": "2026-11-04",
+    "para": "7",
+    "time": "17:50 - 19:10",
+    "subject": "Tibbiyotda axborot texnologiyalar",
+    "type": "Amaliy",
+    "group": "14-OHI-26",
+    "room": "7-o'quv bino, 202-kompyuter xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168026"
+   },
+   {
+    "date": "2026-11-04",
+    "para": "5",
+    "time": "14:50 - 16:10",
+    "subject": "Bulutli texnologiyalar",
+    "type": "Amaliy",
+    "group": "S3-KT-22",
+    "room": "4-o'quv bino, 308-kompyuter xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168027"
+   },
+   {
+    "date": "2026-11-05",
+    "para": "6",
+    "time": "16:20 - 17:40",
+    "subject": "Bulutli texnologiyalar",
+    "type": "Ma`ruza",
+    "group": "S1-KT-22, S3-KT-22",
+    "room": "4-o'quv bino, 404-ma`ruzalar xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168028"
+   },
+   {
+    "date": "2026-11-06",
+    "para": "5",
+    "time": "14:50 - 16:10",
+    "subject": "Ma`lumotlar tuzilmasi va algoritmlar",
+    "type": "Amaliy",
+    "group": "K4-ATT-25",
+    "room": "4-o'quv bino, 306-informatika xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168029"
+   },
+   {
+    "date": "2026-11-07",
+    "para": "4",
+    "time": "13:20 - 14:40",
+    "subject": "Bulutli texnologiyalar",
+    "type": "Amaliy",
+    "group": "S1-KT-22",
+    "room": "4-o'quv bino, 308-kompyuter xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168030"
+   },
+   {
+    "date": "2026-11-09",
+    "para": "6",
+    "time": "16:20 - 17:40",
+    "subject": "Bulutli texnologiyalar",
+    "type": "Ma`ruza",
+    "group": "S1-KT-22, S3-KT-22",
+    "room": "4-o'quv bino, 404-ma`ruzalar xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168031"
+   },
+   {
+    "date": "2026-11-10",
+    "para": "6",
+    "time": "16:20 - 17:40",
+    "subject": "Ma`lumotlar tuzilmasi va algoritmlar",
+    "type": "Ma`ruza",
+    "group": "K4-ATT-25",
+    "room": "4-o'quv bino, 306-informatika xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168032"
+   },
+   {
+    "date": "2026-11-11",
+    "para": "7",
+    "time": "17:50 - 19:10",
+    "subject": "Tibbiyotda axborot texnologiyalar",
+    "type": "Amaliy",
+    "group": "14-OHI-26",
+    "room": "7-o'quv bino, 202-kompyuter xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168033"
+   },
+   {
+    "date": "2026-11-11",
+    "para": "5",
+    "time": "14:50 - 16:10",
+    "subject": "Bulutli texnologiyalar",
+    "type": "Amaliy",
+    "group": "S3-KT-22",
+    "room": "4-o'quv bino, 308-kompyuter xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168034"
+   },
+   {
+    "date": "2026-11-12",
+    "para": "6",
+    "time": "16:20 - 17:40",
+    "subject": "Bulutli texnologiyalar",
+    "type": "Ma`ruza",
+    "group": "S1-KT-22, S3-KT-22",
+    "room": "4-o'quv bino, 404-ma`ruzalar xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168035"
+   },
+   {
+    "date": "2026-11-13",
+    "para": "5",
+    "time": "14:50 - 16:10",
+    "subject": "Ma`lumotlar tuzilmasi va algoritmlar",
+    "type": "Amaliy",
+    "group": "K4-ATT-25",
+    "room": "4-o'quv bino, 306-informatika xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168036"
+   },
+   {
+    "date": "2026-11-14",
+    "para": "4",
+    "time": "13:20 - 14:40",
+    "subject": "Bulutli texnologiyalar",
+    "type": "Amaliy",
+    "group": "S1-KT-22",
+    "room": "4-o'quv bino, 308-kompyuter xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168037"
+   },
+   {
+    "date": "2026-11-16",
+    "para": "6",
+    "time": "16:20 - 17:40",
+    "subject": "Bulutli texnologiyalar",
+    "type": "Ma`ruza",
+    "group": "S1-KT-22, S3-KT-22",
+    "room": "4-o'quv bino, 404-ma`ruzalar xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168038"
+   },
+   {
+    "date": "2026-11-17",
+    "para": "6",
+    "time": "16:20 - 17:40",
+    "subject": "Ma`lumotlar tuzilmasi va algoritmlar",
+    "type": "Ma`ruza",
+    "group": "K4-ATT-25",
+    "room": "4-o'quv bino, 306-informatika xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168039"
+   },
+   {
+    "date": "2026-11-18",
+    "para": "7",
+    "time": "17:50 - 19:10",
+    "subject": "Tibbiyotda axborot texnologiyalar",
+    "type": "Amaliy",
+    "group": "14-OHI-26",
+    "room": "7-o'quv bino, 202-kompyuter xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168040"
+   },
+   {
+    "date": "2026-11-18",
+    "para": "5",
+    "time": "14:50 - 16:10",
+    "subject": "Bulutli texnologiyalar",
+    "type": "Amaliy",
+    "group": "S3-KT-22",
+    "room": "4-o'quv bino, 308-kompyuter xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168041"
+   },
+   {
+    "date": "2026-11-19",
+    "para": "6",
+    "time": "16:20 - 17:40",
+    "subject": "Bulutli texnologiyalar",
+    "type": "Ma`ruza",
+    "group": "S1-KT-22, S3-KT-22",
+    "room": "4-o'quv bino, 404-ma`ruzalar xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168042"
+   },
+   {
+    "date": "2026-11-20",
+    "para": "5",
+    "time": "14:50 - 16:10",
+    "subject": "Ma`lumotlar tuzilmasi va algoritmlar",
+    "type": "Amaliy",
+    "group": "K4-ATT-25",
+    "room": "4-o'quv bino, 306-informatika xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168043"
+   },
+   {
+    "date": "2026-11-21",
+    "para": "4",
+    "time": "13:20 - 14:40",
+    "subject": "Bulutli texnologiyalar",
+    "type": "Amaliy",
+    "group": "S1-KT-22",
+    "room": "4-o'quv bino, 308-kompyuter xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168044"
+   },
+   {
+    "date": "2026-11-24",
+    "para": "6",
+    "time": "16:20 - 17:40",
+    "subject": "Ma`lumotlar tuzilmasi va algoritmlar",
+    "type": "Ma`ruza",
+    "group": "K4-ATT-25",
+    "room": "4-o'quv bino, 306-informatika xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168045"
+   },
+   {
+    "date": "2026-11-25",
+    "para": "7",
+    "time": "17:50 - 19:10",
+    "subject": "Tibbiyotda axborot texnologiyalar",
+    "type": "Amaliy",
+    "group": "14-OHI-26",
+    "room": "7-o'quv bino, 202-kompyuter xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168046"
+   }
+  ],
+  "unsaved": [
+   {
+    "date": "2026-11-10",
+    "para": "6",
+    "time": "16:20 - 17:40",
+    "subject": "Ma`lumotlar tuzilmasi va algoritmlar",
+    "type": "Ma`ruza",
+    "group": "K4-ATT-25",
+    "room": "4-o'quv bino, 306-informatika xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168032"
+   },
+   {
+    "date": "2026-11-09",
+    "para": "6",
+    "time": "16:20 - 17:40",
+    "subject": "Bulutli texnologiyalar",
+    "type": "Ma`ruza",
+    "group": "S1-KT-22, S3-KT-22",
+    "room": "4-o'quv bino, 404-ma`ruzalar xonasi",
+    "url": "/davomat_uqituvchi.asp?dars=168031"
+   }
+  ],
+  "load": {
+   "semester": "2026-2027 Kuzgi semestr",
+   "start": "2026-08-15",
+   "position": "o'qituvchi",
+   "total": "530",
+   "lectures": "92",
+   "items": [
+    {
+     "group": "K4-ATT-25",
+     "subject": "Ma`lumotlar tuzilmasi va algoritmlar",
+     "type": "Ma`ruza",
+     "hours": "30",
+     "students": "24",
+     "total": "30"
+    },
+    {
+     "group": "K4-ATT-25",
+     "subject": "Ma`lumotlar tuzilmasi va algoritmlar",
+     "type": "Amaliy",
+     "hours": "30",
+     "students": "24",
+     "total": "30"
+    },
+    {
+     "group": "K4-ATT-25",
+     "subject": "Ma`lumotlar tuzilmasi va algoritmlar",
+     "type": "Mustaqil ta'lim",
+     "hours": "60",
+     "students": "24",
+     "total": "60"
+    },
+    {
+     "group": "14-OHI-26",
+     "subject": "Tibbiyotda axborot texnologiyalar",
+     "type": "Amaliy",
+     "hours": "30",
+     "students": "18",
+     "total": "30"
+    },
+    {
+     "group": "23-OHI-26_yopildi_24.09.2026",
+     "subject": "Tibbiyotda axborot texnologiyalar",
+     "type": "Amaliy",
+     "hours": "16",
+     "students": "15",
+     "total": "16"
+    },
+    {
+     "group": "S1-KT-22, S3-KT-22",
+     "subject": "Bulutli texnologiyalar",
+     "type": "Ma`ruza",
+     "hours": "16",
+     "students": "40",
+     "total": "16"
+    },
+    {
+     "group": "S1-KT-22",
+     "subject": "Bulutli texnologiyalar",
+     "type": "Amaliy",
+     "hours": "8",
+     "students": "20",
+     "total": "8"
+    },
+    {
+     "group": "S3-KT-22",
+     "subject": "Bulutli texnologiyalar",
+     "type": "Amaliy",
+     "hours": "8",
+     "students": "20",
+     "total": "8"
+    }
+   ]
+  },
+  "kpi": {
+   "bands": [
+    {
+     "name": "Scopus va Web of Science bazasidagi maqola",
+     "weight": "10",
+     "count": "0",
+     "score": "0.00",
+     "limit": "30"
+    },
+    {
+     "name": "OAK ro'yxatidagi jurnalda maqola",
+     "weight": "4",
+     "count": "1",
+     "score": "4.00",
+     "limit": "20",
+     "min": "1"
+    },
+    {
+     "name": "Xalqaro anjumanda tezis",
+     "weight": "1",
+     "count": "2",
+     "score": "2.00",
+     "limit": "6"
+    },
+    {
+     "name": "O'quv qo'llanma",
+     "weight": "8",
+     "count": "0",
+     "score": "0.00",
+     "limit": "16"
+    },
+    {
+     "name": "DGU guvohnomasi",
+     "weight": "3",
+     "count": "0",
+     "score": "0.00",
+     "limit": "9"
+    }
+   ],
+   "papers": [
+    {
+     "title": "Talabalar davomatini raqamli kuzatish usullari",
+     "band": "OAK ro'yxatidagi jurnalda maqola",
+     "date": "2026-10-04",
+     "status": "Tasdiqlangan"
+    },
+    {
+     "title": "Bulutli hisoblash ta'limda",
+     "band": "Xalqaro anjumanda tezis",
+     "date": "2026-10-19",
+     "status": "Ko'rib chiqilmoqda"
+    }
+   ]
+  },
+  "months": [
+   {
+    "month": "Oktabr",
+    "result": "35",
+    "percent": "35%",
+    "status": "Hisoblangan"
+   },
+   {
+    "month": "Sentabr",
+    "result": "20",
+    "percent": "20%",
+    "status": "Hisoblangan"
+   }
+  ],
+  "periods": [
+   {
+    "label": "2026 — Oktabr",
+    "score": "35",
+    "bonus": "",
+    "items": [
+     {
+      "title": "Ochiq dars o'tkazish",
+      "value": "5",
+      "max": "5",
+      "min": "0",
+      "graded": 1,
+      "criteria": [
+       "Ochiq dars rejasi tasdiqlangan",
+       "Kafedra bayonnomasi"
+      ]
+     },
+     {
+      "title": "Ilmiy maqola tayyorlash",
+      "value": "0",
+      "max": "5",
+      "min": "0",
+      "graded": 0,
+      "criteria": []
+     },
+     {
+      "title": "LMS uchun video kontent",
+      "value": "5",
+      "max": "5",
+      "min": "0",
+      "graded": 1,
+      "criteria": []
+     },
+     {
+      "title": "Professor o'qituvchining dars jarayonidagi mas'uliyati",
+      "value": "10",
+      "max": "10",
+      "min": "0",
+      "graded": 1,
+      "criteria": []
+     },
+     {
+      "title": "Rektor ustamasi",
+      "value": "15",
+      "max": "15",
+      "min": "0",
+      "graded": 1,
+      "criteria": []
+     },
+     {
+      "title": "Darsga kechikish",
+      "value": "0",
+      "max": "0",
+      "min": "-5",
+      "graded": 0,
+      "criteria": []
+     }
+    ]
+   },
+   {
+    "label": "2026 — Noyabr",
+    "score": "",
+    "bonus": "",
+    "items": [
+     {
+      "title": "Ochiq dars o'tkazish",
+      "value": "",
+      "max": "5",
+      "min": "0",
+      "graded": 0,
+      "criteria": [
+       "Ochiq dars rejasi tasdiqlangan",
+       "Kafedra bayonnomasi"
+      ]
+     },
+     {
+      "title": "Ilmiy maqola tayyorlash",
+      "value": "",
+      "max": "5",
+      "min": "0",
+      "graded": 0,
+      "criteria": []
+     },
+     {
+      "title": "LMS uchun video kontent",
+      "value": "",
+      "max": "5",
+      "min": "0",
+      "graded": 0,
+      "criteria": []
+     },
+     {
+      "title": "Metodik ishlanma",
+      "value": "",
+      "max": "5",
+      "min": "0",
+      "graded": 0,
+      "criteria": []
+     },
+     {
+      "title": "Professor o'qituvchining dars jarayonidagi mas'uliyati",
+      "value": "",
+      "max": "10",
+      "min": "0",
+      "graded": 0,
+      "criteria": []
+     },
+     {
+      "title": "Rektor ustamasi",
+      "value": "",
+      "max": "15",
+      "min": "0",
+      "graded": 0,
+      "criteria": []
+     },
+     {
+      "title": "Darsga kechikish",
+      "value": "",
+      "max": "0",
+      "min": "-5",
+      "graded": 0,
+      "criteria": []
+     }
+    ]
+   }
+  ]
+ },
+ "sessions": [
+  {
+   "id": 8,
+   "date": "2026-11-11",
+   "started_at": 1794410814.417115,
+   "room": "",
+   "topic": "",
+   "created_at": 1794414414.4171863,
+   "finished_at": null,
+   "para": 1,
+   "total": 18,
+   "came": 17
+  },
+  {
+   "id": 7,
+   "date": "2026-11-08",
+   "started_at": 1794151614.4168177,
+   "room": "",
+   "topic": "Fayllar bilan ishlash",
+   "created_at": 1794414414.4169104,
+   "finished_at": 1794151951.4168177,
+   "para": 1,
+   "total": 18,
+   "came": 18
+  },
+  {
+   "id": 6,
+   "date": "2026-11-05",
+   "started_at": 1793892414.4164765,
+   "room": "",
+   "topic": "Ro'yxatlar va lug'atlar",
+   "created_at": 1794414414.4165442,
+   "finished_at": 1793892784.4164765,
+   "para": 1,
+   "total": 18,
+   "came": 17
+  },
+  {
+   "id": 5,
+   "date": "2026-11-02",
+   "started_at": 1793633214.4162004,
+   "room": "",
+   "topic": "Funksiyalar",
+   "created_at": 1794414414.4162598,
+   "finished_at": 1793633438.4162004,
+   "para": 1,
+   "total": 18,
+   "came": 18
+  },
+  {
+   "id": 4,
+   "date": "2026-10-30",
+   "started_at": 1793374014.415702,
+   "room": "",
+   "topic": "Sikllar",
+   "created_at": 1794414414.4157495,
+   "finished_at": 1793374335.415702,
+   "para": 1,
+   "total": 18,
+   "came": 15
+  },
+  {
+   "id": 3,
+   "date": "2026-10-27",
+   "started_at": 1793114814.4153547,
+   "room": "",
+   "topic": "Shart operatorlari",
+   "created_at": 1794414414.4154298,
+   "finished_at": 1793115098.4153547,
+   "para": 1,
+   "total": 18,
+   "came": 16
+  },
+  {
+   "id": 2,
+   "date": "2026-10-24",
+   "started_at": 1792855614.4150043,
+   "room": "",
+   "topic": "O'zgaruvchilar va turlar",
+   "created_at": 1794414414.415078,
+   "finished_at": 1792855860.4150043,
+   "para": 1,
+   "total": 18,
+   "came": 17
+  },
+  {
+   "id": 1,
+   "date": "2026-10-21",
+   "started_at": 1792596414.4144447,
+   "room": "",
+   "topic": "Kirish. Kurs maqsadi",
+   "created_at": 1794414414.4145372,
+   "finished_at": 1792596685.4144447,
+   "para": 1,
+   "total": 18,
+   "came": 18
+  }
+ ],
+ "coursePlan": 180,
+ "cancelled": [
+  {
+   "date": "2026-09-16",
+   "para": 7,
+   "subject": "Tibbiyotda axborot texnologiyalar"
+  }
+ ],
+ "semester": {
+  "start": "2026-09-14",
+  "weeks": 15
+ },
+ "marks": [
+  {
+   "period": "2026-11",
+   "item": "Ochiq dars o'tkazish"
+  }
+ ],
+ "progress": [
+  {
+   "period": "2026-11",
+   "item": "Metodik ishlanma",
+   "step": -1
+  }
+ ]
+}

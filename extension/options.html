@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="uz"><head><meta charset="utf-8"><title>attendance: sozlamalar</title>
+<style>
+  body { font: 14px/1.5 system-ui, sans-serif; margin: 16px; min-width: 360px; color: #1d1d1f; }
+  textarea { width: 100%; box-sizing: border-box; font: 13px ui-monospace, monospace; }
+  p { margin: 8px 0; } .muted { color: #66666b; } .err { color: #cf0f1f; } .ok { color: #17753a; }
+  code { font-size: 13px; }
+</style></head><body>
+<h3>Ilova manzillari</h3>
+<p class="muted">digital.oxu.uz sessiyasi faqat shu manzillardagi attendance sahifasiga beriladi:</p>
+<ul id="fixed"></ul>
+<p>Qo'shimcha manzillar (har qatorda bittadan), masalan boshqa portdagi demo:</p>
+<textarea id="extra" rows="4" spellcheck="false" placeholder="http://127.0.0.1:8791"></textarea>
+<p><button id="save">Saqlash</button> <span id="msg" role="status"></span></p>
+<p class="muted">Faqat <code>http://127.0.0.1:PORT</code>, <code>http://localhost:PORT</code> yoki <code>https://…</code> qabul qilinadi.
+Boshqa portda ishlash uchun manifest.json dagi <code>matches</code> ham mos bo'lishi kerak (127.0.0.1 va localhost har qanday portda ishlaydi).</p>
+<script src="options.js"></script>
+</body></html>

@@ -48,6 +48,22 @@ Cards: 20px radius, 24px padding, a two-layer soft shadow, no border. Controls: 
 - Dates read as `8-noyabr` (year only when not this year); date inputs keep `kk.oo.yyyy`.
 - Toasts: white surface; red text only for errors.
 
+## Honest status
+
+Green means the site or the app confirmed it; red needs action now; amber is old or estimated; grey is not known.
+Nothing is shown green on inference alone. A site lesson that ended after the last read of the site's unsaved
+list has the state `Noma'lum` (`.state-line.unknown`, `.chip.unknown`: grey, italic): it counts as held, not as
+taken. `.age-line` sits under the page head of every page fed by the site: nothing under two hours, a quiet line
+after that, a red one after a day (with `Sinxronlash`), and "Qisman yangilangan" when a sync failed in part.
+
+## Dense where it matters
+
+The lesson roster is for roll call: 40 px rows, an empty grade box drawn only when pointed at or focused, and two
+columns from 1400 px for groups over 16 so the whole list is on one screen. Timetable cards give the status its own
+line and never cut it: names take two lines, the room is what gives way. Errors raised in a sheet appear in the
+sheet (`#sheet-error`, `aria-invalid` on the field), not in a toast behind the backdrop. A redraw of the same page
+keeps the scroll position, the open sections and the focus.
+
 ## Motion
 
 150 ms state changes only. No entrance animation. Reduced motion is respected.

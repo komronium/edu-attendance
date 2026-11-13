@@ -13,12 +13,14 @@ Light, dark or automatic theme is chosen in the sidebar.
 ## Run locally
 
     make demo                                   # throw-away demo data, no login: http://127.0.0.1:8766/
+    ./bin/attendance demo --no-login --with-site   # also an invented timetable, load, KPI and bonus
+    ./bin/attendance demo --no-login --with-site --stale-days 3   # ... as if the last sync were 3 days old
 
     # or with your own data:
     ./bin/attendance set-password --generate --data ./data
     ./bin/attendance run --data ./data
 
-Commands: `run` (default), `set-password`, `demo`, `import FILE`. Run `attendance help` for the flags.
+Commands: `run` (default), `set-password`, `demo`, `import FILE --yes`, `backup`. Run `attendance help` for the flags.
 
 Environment (each has a matching flag): `ATTENDANCE_DATA` (default `/var/lib/attendance`),
 `ATTENDANCE_BIND` (default `127.0.0.1`), `ATTENDANCE_PORT` (default `8766`),
@@ -39,9 +41,28 @@ for the app password first, the cookie waits until you have logged in there. The
 twice within six hours. The Kabinet button "digital.oxu.uz ga kirish" still works and syncs at once.
 Without the extension the cookie can still be pasted by hand.
 
-It works on `http://localhost`, `http://127.0.0.1` (any port) and the live site. For another address,
-add that origin to `host_permissions` and `content_scripts[0].matches` in `extension/manifest.json`
-and reload the extension. Only pages on those origins receive the cookie.
+The session cookie is handed only to an attendance page whose exact address (port included) is allowed:
+`https://davomat.lidersement.uz`, `http://127.0.0.1:8766` and `http://localhost:8766`. Any other page on
+localhost, whatever its port, is ignored, so an unrelated local site cannot pose as the app. To use another
+address (for example `make demo` on another port), add it on the extension's options page (the extension's
+card in `chrome://extensions` → Details → Extension options). `127.0.0.1` and `localhost` work on any port
+once listed; another host also needs its origin in `host_permissions` and `content_scripts[0].matches` in
+`extension/manifest.json`, and a reload of the extension.
+
+### Checking the extension by hand
+
+The extension cannot be tested from the command line. After changing it, in a throw-away Chrome profile
+(not your own), with the app on `http://127.0.0.1:8766`:
+
+1. Load the unpacked `extension/` folder, open the app and log in. Nothing happens yet.
+2. Open any other page on localhost, on another port, that runs `window.postMessage({source:"attendance-app",type:"ready"}, location.origin)`
+   in its console. Log in on digital.oxu.uz: the app tab syncs, and that other page receives nothing
+   (the extension's service worker trace, under `chrome.storage.local.trace`, shows `refused`).
+3. With no app tab open, log in on digital.oxu.uz again after six hours or from another profile state: the
+   hosted app opens in the background, syncs and closes. The toolbar icon shows `…`, then `✓`.
+4. Add `http://127.0.0.1:8791` on the options page, run `./bin/attendance demo --port 8791`, open it, and log in
+   to digital.oxu.uz: that demo receives the cookie.
+5. Remove that address again: the demo no longer does.
 
 ## Lesson plans
 
@@ -54,7 +75,8 @@ move to the next lesson of the same subject and group. Each subject can have a s
 
 ## Build and test
 
-    make test
+    make test       # go vet, go test -race, node --test (pure logic in web/lib and web/pace.js)
+    make e2e        # headless Chrome against the demo: every page, both themes, several widths, key flows
     make build      # ./bin/attendance
     make linux      # ./bin/attendance-linux-amd64, for the VPS (no cgo, no runtime needed)
 
@@ -68,19 +90,72 @@ Stop the old service before starting the new one: both must not write the same d
 
 Live at https://davomat.lidersement.uz: `attendance.service` runs `/opt/attendance/attendance` on
 127.0.0.1:8766 behind nginx, with its data in `/var/lib/davomat`. To update, run `make linux`, copy the
-binary over and restart the service. Back up the database first; never copy a laptop database over it.
+binary over, run `attendance backup` with it, and restart the service. Never copy a laptop database over it.
+
+`deploy/` holds example nginx and systemd files. Check the live ones against them:
+
+1. nginx overwrites `X-Real-IP` with `$remote_addr` (the login lockout counts per that address). Live: yes.
+2. nginx sets `X-Forwarded-Proto $scheme`, or the unit sets `ATTENDANCE_SECURE_COOKIE=1` (or both). Live: both.
+3. nginx `proxy_read_timeout` is at least 90s (a manual sync is allowed 70 s; real ones took 14-19 s on 2026-11-12). Live: not set (60 s default).
+4. nginx limits `/login` (`limit_req`) and sends HSTS. Live: neither.
+5. the unit sets `UMask=0077`; the data directory is owned by the service user only. Live: no UMask; the files are 0644, but the directory above is root-only (0700), so nobody else can reach them.
+6. the backup timer is enabled, and the copies are also kept somewhere other than the server. Live: there is no backup of this database at all.
+
+## Backup and restore
+
+    attendance backup --data /var/lib/davomat            # -> /var/lib/davomat/backups/attendance-*.sqlite3
+    attendance backup --data /var/lib/davomat --to DIR --keep 10
+
+A backup is a consistent copy taken through SQLite (`VACUUM INTO`), safe while the service runs, together
+with `auth.json`; files are 0600 and the newest 30 are kept by default. Do not copy `attendance.sqlite3` by
+hand while the service runs: the latest changes may still be in the `-wal` file next to it. Copies are also
+made automatically before `import` and before a new version adds a column to the database.
+`deploy/attendance-backup.timer.example` runs it daily.
+
+To restore: stop the service, move `attendance.sqlite3`, `attendance.sqlite3-wal` and
+`attendance.sqlite3-shm` aside, copy the chosen backup to `attendance.sqlite3` (owner only, `chmod 600`),
+start the service.
 
 Production data (the sqlite db and `auth.json`) is intentionally NOT in this repo.
 
 ## Timetable
 
 The Dars jadvali page shows a week: lessons from the last sync, plus Algoritmlash for 2-ATT-25
-(`COURSE` in `web/app.js`: Monday-Thursday, paras 3 and 4, room K4 / 309), whose attendance is taken in
+(`COURSE` in `web/lib/rules.js`: Monday-Thursday, paras 3 and 4, room K4 / 309), whose attendance is taken in
 this app. Those classes are generated, not stored: a lesson row is created only when attendance is
 started from its card. Other lessons open their attendance page on digital.oxu.uz in a new tab;
 each subject has its own colour: full when attendance is taken, lighter when it is not or the
 lesson is still ahead. A past site lesson counts as taken when it is not on the site's unsaved list.
 The lessons table keeps them as para 1 and 2 of the day, shown as 3 and 4 everywhere.
+
+### What the app knows about a site lesson
+
+Whether attendance was saved on the site is learned only by reading the site's "unsaved" list, so a lesson
+that ended after the last read is neither "Olingan" nor "Olinmagan": it shows **Noma'lum**, is counted as
+held but not as taken, and a red line on the page says how old the data is. A lesson on the unsaved list
+stays "Olinmagan" however old the data is. Each part of the synced data (timetable, unsaved list, load, KPI,
+bonus) records when it was last read successfully, so a sync that failed in part does not make the old
+part look fresh; an unsaved-lessons page that no longer looks like the expected table keeps the old list
+and warns.
+
+## New semester
+
+Kabinet → Semestr → "Yangi semestr": a database copy is made first, the new start and length are saved,
+every student is archived (not deleted), and the earlier lessons and debts stay under "Oldingi semestrlar".
+The course's lessons are generated only inside the semester's dates, so none appear after it ends. The
+group, subject and days are still the `COURSE` constant in `web/lib/rules.js`.
+
+## Sessions
+
+A login lasts 12 hours from the last request: an open page renews it. If it ends anyway, the page asks for
+the password in place and carries on, nothing typed is lost. Behind nginx on the same host, `X-Real-IP` and
+`X-Forwarded-Proto` are believed only when the connection comes from the proxy; a login lockout is counted
+per address before the password is checked, and only two passwords are checked at once.
+
+## Deleted lessons
+
+Deleting a lesson hides it with its attendance, grades and retakes; "Qaytarish" in the toast brings it back
+whole, and it is purged 30 days later. A student added after a lesson started is offered under its roster.
 
 ## Cancelled lessons
 
@@ -139,8 +214,13 @@ are never read. The result is kept as one JSON snapshot in the `oxu_snapshot` ta
 ## Layout
 
 - `main.go` - command line, embeds `web/`
-- `internal/store` - SQLite storage, validation, `import` and the demo seed
+- `internal/store` - SQLite storage, validation, backups, `import` and the demo seed
 - `internal/auth` - password hash and signed session cookie
 - `internal/server` - login, JSON API, static files
 - `internal/oxu` - read-only scraper for digital.oxu.uz
-- `web/` - single-page UI (`index.html`, `app.js`, `app.css`)
+- `internal/demo` - the invented site data for `demo --with-site`
+- `web/` - single-page UI: `index.html`, `app.js` (views), `app.css`; `web/lib/` and `web/pace.js` hold the
+  pure logic (the course, timetable, load, bonus, plans) as scripts that `node --test` also loads
+- `extension/` - the Chrome extension
+- `deploy/` - example nginx, systemd and backup-timer files
+- `scripts/e2e.mjs` - the browser smoke test (`make e2e`)

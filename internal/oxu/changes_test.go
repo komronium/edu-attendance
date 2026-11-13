@@ -1,6 +1,9 @@
 package oxu
 
 import (
+	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -72,5 +75,28 @@ func TestAttendanceIsMissingOnlyAfterThePara(t *testing.T) {
 	}
 	if got := Changes(later, later, at("2026-11-10", "16:45"), at("2026-11-10", "16:30")); len(got) != 0 {
 		t.Fatalf("told twice: %+v", got)
+	}
+}
+
+// The page and the notices both need to know when a para ends; they keep their own copy of the
+// university's times. This fails when one changes without the other.
+func TestParaEndTimesMatchThePage(t *testing.T) {
+	raw, err := os.ReadFile("../../web/lib/dates.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	block := regexp.MustCompile(`PARA_TIMES = \{([^}]*)\}`).FindSubmatch(raw)
+	if block == nil {
+		t.Fatal("PARA_TIMES not found in web/lib/dates.js")
+	}
+	entries := regexp.MustCompile(`(\d+): \["\d\d:\d\d", "(\d\d:\d\d)"\]`).FindAllSubmatch(block[1], -1)
+	if len(entries) != len(paraEnd) {
+		t.Fatalf("the page has %d paras, the notices %d", len(entries), len(paraEnd))
+	}
+	for _, e := range entries {
+		n, _ := strconv.Atoi(string(e[1]))
+		if paraEnd[n] != string(e[2]) {
+			t.Errorf("para %d ends %s on the page, %s in the notices", n, e[2], paraEnd[n])
+		}
 	}
 }

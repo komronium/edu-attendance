@@ -279,7 +279,7 @@ func TestEmptyListsAreArraysNotNull(t *testing.T) {
 	e := newEnv(t)
 	e.login()
 	for path, key := range map[string]string{"/api/students": "students", "/api/sessions": "sessions", "/api/retakes": "items",
-		"/api/rooms": "rooms", "/api/retake-sessions": "sessions", "/api/plans": "plans"} {
+		"/api/rooms": "rooms", "/api/plans": "plans"} {
 		_, out := e.api("GET", path, "")
 		if arr, ok := out[key].([]any); !ok || len(arr) != 0 {
 			t.Errorf("%s: %s should be [], got %v", path, key, out[key])
@@ -414,5 +414,55 @@ func TestPublicRetakes(t *testing.T) {
 	e.api("DELETE", "/api/retake-share", "")
 	if res, _ := e.do("GET", "/q/"+fresh, ""); res.StatusCode != 404 {
 		t.Fatalf("stopped link still works: %d", res.StatusCode)
+	}
+}
+
+func TestLargeJSONIsGzippedWhenAccepted(t *testing.T) {
+	e := newEnv(t)
+	e.login()
+	names := make([]string, 0, 100)
+	for i := 0; i < 100; i++ {
+		names = append(names, `"Talaba Nomi `+strconv.Itoa(i)+`"`)
+	}
+	e.api("POST", "/api/students", `{"names":[`+strings.Join(names, ",")+`]}`)
+
+	res, _ := e.do("GET", "/api/students", "", "Cookie", e.cookie, "Accept-Encoding", "gzip")
+	if res.Header.Get("Content-Encoding") != "" { // Go's client would unzip transparently: this one asked itself
+		t.Log("client decoded:", res.Header.Get("Content-Encoding"))
+	}
+	req, _ := http.NewRequest("GET", e.srv.URL+"/api/students", nil)
+	req.Header.Set("Cookie", e.cookie)
+	req.Header.Set("Accept-Encoding", "gzip")
+	raw, err := (&http.Transport{DisableCompression: true}).RoundTrip(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Body.Close()
+	if raw.Header.Get("Content-Encoding") != "gzip" || !strings.Contains(raw.Header.Get("Vary"), "Accept-Encoding") {
+		t.Fatalf("large body not gzipped: %v", raw.Header)
+	}
+	// a small body, and a client that does not accept gzip, are left alone
+	req2, _ := http.NewRequest("GET", e.srv.URL+"/api/course-plan", nil)
+	req2.Header.Set("Cookie", e.cookie)
+	req2.Header.Set("Accept-Encoding", "gzip")
+	small, _ := (&http.Transport{DisableCompression: true}).RoundTrip(req2)
+	defer small.Body.Close()
+	if small.Header.Get("Content-Encoding") != "" {
+		t.Fatal("a small body was compressed")
+	}
+	req3, _ := http.NewRequest("GET", e.srv.URL+"/api/students", nil)
+	req3.Header.Set("Cookie", e.cookie)
+	plain, _ := (&http.Transport{DisableCompression: true}).RoundTrip(req3)
+	defer plain.Body.Close()
+	if plain.Header.Get("Content-Encoding") != "" {
+		t.Fatal("compressed for a client that did not ask")
+	}
+}
+
+func TestHealthzChecksTheDatabase(t *testing.T) {
+	e := newEnv(t)
+	_, out := e.do("GET", "/healthz", "")
+	if !strings.Contains(out, `"db":true`) {
+		t.Fatalf("%s", out)
 	}
 }

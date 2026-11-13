@@ -38,7 +38,7 @@
     return all ? workDays(first, today) / all : 1;
   }
 
-  // lines: { plan, done, noAtt, closed, frac }. A line with its own frac (a group studying in a short
+  // lines: { plan, done, noAtt, unknown, closed, frac }. A line with its own frac (a group studying in a short
   // session) is measured by it; the rest by the semester's frac. A closed group will not be taught again and its plan is what
   // it got: it is expected in full and held in full, so it neither helps nor hurts the comparison.
   // A finished group counts as any other: the hours it got ahead of the calendar are real.
@@ -47,7 +47,7 @@
     const clamp = (v) => Math.max(0, Math.min(1, v));
     for (const l of lines) {
       const p = l.plan || 0;
-      plan += p; held += (l.done || 0) + (l.noAtt || 0);
+      plan += p; held += (l.done || 0) + (l.noAtt || 0) + (l.unknown || 0);   // unknown: held, attendance not known
       if (l.closed) closedPlan += p;
       else { openPlan += p; openExpected += p * clamp(l.frac ?? frac); }
     }

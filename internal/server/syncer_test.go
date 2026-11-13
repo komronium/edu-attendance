@@ -236,3 +236,105 @@ func TestDataOfAnotherAccountIsHidden(t *testing.T) {
 		}
 	}
 }
+
+// a sync the owner started finishes and is saved even when the request that started it is gone
+func TestSyncOutlivesItsRequest(t *testing.T) {
+	db, _ := store.Open(":memory:")
+	t.Cleanup(func() { db.Close() })
+	db.SetOxuOwner("123456")
+	release, reached := make(chan struct{}), make(chan struct{})
+	var sawCancelled bool
+	s := newSyncer(db, func(ctx context.Context, cookie, owner string, _ *oxu.Data) (*oxu.Data, []string, error) {
+		close(reached)
+		<-release
+		sawCancelled = ctx.Err() != nil
+		return &oxu.Data{Account: owner}, nil, nil
+	}, "")
+	s.cookie, s.state = "good", "ok"
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { _, err := s.Now(ctx); done <- err }()
+	<-reached
+	cancel() // the page was closed, or the proxy gave up
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatalf("a dropped request aborted the sync: %v", err)
+	}
+	if sawCancelled {
+		t.Fatal("the scrape was cancelled with its request")
+	}
+	if raw, _ := s.Snapshot(); raw == nil {
+		t.Fatal("the result was not saved")
+	}
+	if st := s.Status(); st.State != "ok" {
+		t.Fatalf("state %q, want ok", st.State)
+	}
+}
+
+func TestAnotherSyncDuringARunIsBusy(t *testing.T) {
+	db, _ := store.Open(":memory:")
+	t.Cleanup(func() { db.Close() })
+	db.SetOxuOwner("123456")
+	release, reached := make(chan struct{}), make(chan struct{})
+	s := newSyncer(db, func(_ context.Context, _, owner string, _ *oxu.Data) (*oxu.Data, []string, error) {
+		close(reached)
+		<-release
+		return &oxu.Data{Account: owner}, nil, nil
+	}, "")
+	s.cookie, s.state = "good", "ok"
+	done := make(chan struct{})
+	go func() { s.Now(context.Background()); close(done) }()
+	<-reached
+	if _, err := s.Now(context.Background()); !errors.Is(err, errBusy) {
+		t.Fatalf("second sync: %v", err)
+	}
+	if !s.Status().Running {
+		t.Fatal("status does not say a sync is running")
+	}
+	close(release)
+	<-done
+}
+
+// the cookie is forgotten while a sync with it is running: it must stay forgotten
+func TestForgetDuringARunStaysForgotten(t *testing.T) {
+	db, _ := store.Open(":memory:")
+	t.Cleanup(func() { db.Close() })
+	db.SetOxuOwner("123456")
+	release, reached := make(chan struct{}), make(chan struct{})
+	s := newSyncer(db, func(_ context.Context, _, owner string, _ *oxu.Data) (*oxu.Data, []string, error) {
+		close(reached)
+		<-release
+		return &oxu.Data{Account: owner}, nil, nil
+	}, filepath.Join(t.TempDir(), "oxu_cookie"))
+	s.cookie, s.state = "good", "ok"
+	done := make(chan struct{})
+	go func() { s.Now(context.Background()); close(done) }()
+	<-reached
+	if err := s.Forget(); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	<-done
+	if st := s.Status(); st.State != "none" || st.HasCookie {
+		t.Fatalf("after Forget: state %q, has cookie %v", st.State, st.HasCookie)
+	}
+}
+
+func TestSyncErrorsCarryACode(t *testing.T) {
+	e := newEnv(t)
+	e.login()
+	e.api("PUT", "/api/oxu/owner", `{"code":"123456"}`)
+	for body, code := range map[string]string{`{"cookie":"dead"}`: "oxu_session", `{"cookie":"someone"}`: "oxu_wrong_account", `{"cookie":"offline"}`: "oxu_unreachable", `{}`: "oxu_no_cookie"} {
+		status, out := e.api("POST", "/api/oxu/sync", body)
+		if status != 400 || out["code"] != code {
+			t.Errorf("%s: %d %v, want code %s", body, status, out, code)
+		}
+	}
+	if status, out := e.api("GET", "/api/students/999", ""); status != 404 || out["code"] != "not_found" {
+		t.Errorf("not found: %d %v", status, out)
+	}
+	if status, out := e.api("POST", "/api/sessions", `{"date":"x"}`); status != 400 || out["code"] != "validation" {
+		t.Errorf("validation: %d %v", status, out)
+	}
+}

@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -24,9 +27,12 @@ const schedulePage = `<div class="day-section"><div class="day-header"><span cla
 <div> <i class="lni"></i> 4-o'quv bino, 306-xona </div></div></div>
 <div class="lesson-footer"><a class="btn-davomat" href="/davomat_uqituvchi.asp?dars=5&guruh=6&patok=0">Davomat</a></div></div></div></div>`
 
-const unsavedPage = `<table><tr><th>N</th><th>Sana</th><th>Para</th><th>Fan</th><th>Dars turi</th><th>Guruh</th><th>Xona</th><th>Davomat</th></tr>
-<tr><td>1</td><td>2026-10-17<small>19 kun oldin</small></td><td>3-para<small>11:30 - 12:50</small></td><td>Informatika</td><td>Amaliyot</td><td>14-OHI-26</td><td>2-bino</td>
-<td><a class="btn" href="davomat_uqituvchi.asp?dars=9&guruh=8&patok=0">Davomat</a><button class="btn" data-dars="9">Saqlash</button></td></tr></table>`
+// the unsaved-lessons page as the site sends it (2026-11-12, trimmed): title, a "Jami: N" badge, the table
+const unsavedHead = `<title>Davomati saqlanmagan darslar</title><div class="card-header"><div>Davomati saqlanmagan darslar</div> <span class="jami-badge">Jami: %d</span></div>`
+const unsavedPage = `<title>Davomati saqlanmagan darslar</title><div class="card-header"><div>Davomati saqlanmagan darslar</div> <span class="jami-badge">Jami: 1</span></div>
+<table id="example"><thead><tr><th>N</th><th>Sana</th><th>Para</th><th>Fan</th><th>Dars turi</th><th>Guruh</th><th>Xona</th><th>Davomat</th></tr></thead><tbody>
+<tr><td>1</td><td data-order="2026-10-17"> 2026-10-17<br><span class="kun-badge kun-eski">19 kun oldin</span></td><td>3-para<br><small class="text-muted">11:30 - 12:50</small></td><td>Informatika</td><td>Amaliyot</td><td>14-OHI-26</td><td>2-bino</td>
+<td><a class="btn" href="davomat_uqituvchi.asp?dars=9&guruh=8&patok=0">Davomat</a><button class="btn btn-saqlash" data-dars="9">Saqlash</button></td></tr></tbody></table>`
 
 const loadForm = `<form method="get"><select name="ses"><option value="0">Tanlanmagan</option><option value="8">2025-2026 Bahorgi semestr</option>
 <option value="9">2026-2027 Kuzgi semestr</option><option value="10">2026-2027 Bahorgi semestr</option></select>
@@ -60,8 +66,11 @@ const ratingPage = `<div class="kpi-stats"><div class="kpi-stat"><div class="kpi
 func site(t *testing.T, routes map[string]string) (*Client, *[]string) {
 	t.Helper()
 	var cookies []string
+	var mu sync.Mutex // timetable pages are read in parallel
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
 		cookies = append(cookies, r.Header.Get("Cookie"))
+		mu.Unlock()
 		if r.Method != http.MethodGet {
 			t.Errorf("sync must only GET, got %s %s", r.Method, r.URL)
 		}
@@ -248,9 +257,12 @@ func TestFailedSectionKeepsPreviousValue(t *testing.T) {
 // Attendance pages may have effects, and the Saqlash button writes: neither is ever requested.
 func TestSyncNeverOpensAttendancePages(t *testing.T) {
 	var seen []string
+	var seenMu sync.Mutex
 	routes := fullSite()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenMu.Lock()
 		seen = append(seen, r.URL.Path)
+		seenMu.Unlock()
 		body, ok := routes[r.URL.RequestURI()]
 		if !ok {
 			body = routes[r.URL.Path]
@@ -358,5 +370,141 @@ func TestCurrentSemester(t *testing.T) {
 		if got := currentSemester(time.Date(c.y, c.m, 10, 0, 0, 0, 0, time.UTC)); got != c.want {
 			t.Errorf("%v %d: %s", c.m, c.y, got)
 		}
+	}
+}
+
+func TestEachSectionRecordsWhenItWasRead(t *testing.T) {
+	routes := fullSite()
+	delete(routes, "/uqituvchi_saqlanmagan_darslar.asp")
+	c, _ := site(t, routes)
+	old := float64(time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC).Unix())
+	prev := &Data{Unsaved: []Lesson{{Date: "2026-10-30", Para: "3"}}, Fetched: map[string]float64{"unsaved": old, "load": old}}
+	d, warnings, err := c.Sync(context.Background(), "123456", prev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := float64(c.now().Unix())
+	for _, s := range []string{"lessons", "load", "kpi", "periods", "months"} {
+		if d.Fetched[s] != now {
+			t.Errorf("%s fetched at %v, want %v", s, d.Fetched[s], now)
+		}
+	}
+	// the section that failed keeps its old list and its old time: it did not get any fresher
+	if d.Fetched["unsaved"] != old || len(d.Unsaved) != 1 {
+		t.Fatalf("unsaved: %v %v", d.Fetched["unsaved"], d.Unsaved)
+	}
+	if prev.Fetched["load"] != old {
+		t.Fatal("the previous data's times were changed in place")
+	}
+	if len(d.Warnings) != 1 || len(warnings) != 1 {
+		t.Fatalf("warnings %v / %v", d.Warnings, warnings)
+	}
+}
+
+func TestUnsavedPageThatChangedKeepsTheOldList(t *testing.T) {
+	routes := fullSite()
+	// eight cells per row, but nothing that reads as a date and a para
+	routes["/uqituvchi_saqlanmagan_darslar.asp"] = fmt.Sprintf(unsavedHead, 1) + `<table><tr><td>1</td><td>bugun</td><td>uchinchi</td><td>Fan</td><td>Amaliy</td><td>G</td><td>X</td><td></td></tr></table>`
+	c, _ := site(t, routes)
+	prev := &Data{Unsaved: []Lesson{{Date: "2026-10-30", Para: "3"}}}
+	d, warnings, err := c.Sync(context.Background(), "123456", prev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d.Unsaved) != 1 || len(warnings) != 1 || !strings.HasPrefix(warnings[0], "davomat holati") {
+		t.Fatalf("unsaved %v, warnings %v", d.Unsaved, warnings)
+	}
+	if _, ok := d.Fetched["unsaved"]; ok {
+		t.Fatal("an unreadable page must not count as read")
+	}
+}
+
+func TestUnsavedPageWithoutTableIsEmpty(t *testing.T) {
+	routes := fullSite()
+	routes["/uqituvchi_saqlanmagan_darslar.asp"] = fmt.Sprintf(unsavedHead, 0) + `<p class="text-muted">Hozircha davomati saqlanmagan dars yo'q.</p>`
+	c, _ := site(t, routes)
+	d, warnings, err := c.Sync(context.Background(), "123456", &Data{Unsaved: []Lesson{{Date: "2026-10-30", Para: "3"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d.Unsaved) != 0 || len(warnings) != 0 || d.Fetched["unsaved"] == 0 {
+		t.Fatalf("unsaved %v, warnings %v, fetched %v", d.Unsaved, warnings, d.Fetched)
+	}
+}
+
+func TestWeekPagesComeBackInOrderAFewAtATime(t *testing.T) {
+	var mu sync.Mutex
+	inFlight, most := 0, 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		inFlight++
+		if inFlight > most {
+			most = inFlight
+		}
+		mu.Unlock()
+		time.Sleep(20 * time.Millisecond)
+		mu.Lock()
+		inFlight--
+		mu.Unlock()
+		week := r.URL.Query().Get("week")
+		if week == "" {
+			week = "0"
+		}
+		fmt.Fprintf(w, `<select name="role"></select><div class="day-section"><span class="day-date">%s</span><div class="lesson-card"><span class="para-num">1</span><span class="fan-name">Fan</span></div></div>`, week)
+	}))
+	defer srv.Close()
+	c, err := newClient(srv.URL, "ASPSESSIONIDX=abc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.now = func() time.Time { return time.Date(2026, 12, 20, 12, 0, 0, 0, time.UTC) } // late in the semester: many weeks
+	lessons, err := c.lessons(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lessons) < 15 {
+		t.Fatalf("only %d weeks read", len(lessons))
+	}
+	for i := 1; i < len(lessons); i++ {
+		a, _ := strconv.Atoi(lessons[i-1].Date)
+		b, _ := strconv.Atoi(lessons[i].Date)
+		if b != a+1 {
+			t.Fatalf("weeks out of order at %d: %s then %s", i, lessons[i-1].Date, lessons[i].Date)
+		}
+	}
+	if most > weekPagesAtOnce || most < 2 {
+		t.Fatalf("%d pages at once, want 2..%d", most, weekPagesAtOnce)
+	}
+}
+
+// the site's own count must match what could be read, and a page that is not this page proves nothing
+func TestUnsavedPageIsRecognisedByTitleAndCount(t *testing.T) {
+	parse := func(body string) ([]Lesson, bool) {
+		doc, err := html.Parse(strings.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return parseUnsaved(doc)
+	}
+	if l, ok := parse(unsavedPage); !ok || len(l) != 1 || l[0].Time != "11:30 - 12:50" || l[0].Group != "14-OHI-26" {
+		t.Fatalf("the real page: %v %v", l, ok)
+	}
+	if l, ok := parse(fmt.Sprintf(unsavedHead, 0)); !ok || len(l) != 0 {
+		t.Fatalf("empty list: %v %v", l, ok)
+	}
+	// the badge says 3 but only one row can be read: the page changed
+	if _, ok := parse(strings.Replace(unsavedPage, "Jami: 1", "Jami: 3", 1)); ok {
+		t.Fatal("a count that does not match the rows was accepted")
+	}
+	// the badge says 2 and there are no rows at all
+	if _, ok := parse(fmt.Sprintf(unsavedHead, 2)); ok {
+		t.Fatal("rows missing but accepted")
+	}
+	// a page that is not the unsaved-lessons page (no title) never means "nothing is missing"
+	if _, ok := parse(`<h1>Xatolik</h1><p>Server band</p>`); ok {
+		t.Fatal("an unrelated page was read as an empty list")
+	}
+	if _, ok := parse(`<table><tr><td>x</td></tr></table>`); ok {
+		t.Fatal("a table without the title was accepted")
 	}
 }

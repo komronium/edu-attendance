@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // Vector produced by the original Python implementation (since removed). It guards compatibility with
@@ -103,4 +104,39 @@ func TestLockout(t *testing.T) {
 	if a.Locked("1.2.3.4") {
 		t.Fatal("still locked after success")
 	}
+}
+
+func TestFailuresOfAddressesThatNeverReturnArePruned(t *testing.T) {
+	a := pythonAuth(t)
+	for i := range 1000 {
+		a.Fail("10.0." + string(rune('a'+i%26)) + string(rune('a'+i/26)))
+	}
+	old := time.Now().Add(-2 * lockSeconds * time.Second)
+	a.mu.Lock()
+	for ip := range a.failures {
+		a.failures[ip] = []time.Time{old}
+	}
+	a.mu.Unlock()
+	a.Attempt("1.2.3.4")
+	a.mu.Lock()
+	n := len(a.failures)
+	a.mu.Unlock()
+	if n != 1 {
+		t.Fatalf("%d addresses kept, want only the one that just tried", n)
+	}
+}
+
+func TestHashSlotsAreLimited(t *testing.T) {
+	a := pythonAuth(t)
+	r1, ok1 := a.TryHash()
+	r2, ok2 := a.TryHash()
+	_, ok3 := a.TryHash()
+	if !ok1 || !ok2 || ok3 {
+		t.Fatalf("%v %v %v", ok1, ok2, ok3)
+	}
+	r1()
+	if _, ok := a.TryHash(); !ok {
+		t.Fatal("a released slot is not free again")
+	}
+	r2()
 }

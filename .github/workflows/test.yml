@@ -1,0 +1,24 @@
+name: test
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: vet, race tests, JS tests
+        run: make test
+      - name: known vulnerabilities in the code that is called
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+      - name: browser smoke test
+        run: make e2e
+        env:
+          E2E_CHROME: google-chrome

@@ -1,4 +1,4 @@
-.PHONY: build linux test demo run clean
+.PHONY: build linux test e2e demo run clean
 
 build:
 	go build -o bin/attendance .
@@ -8,8 +8,11 @@ linux:
 
 test:
 	go vet ./...
-	go test ./...
+	go test -race ./...
 	node --test webtest/*.test.js
+
+e2e: build
+	node scripts/e2e.mjs bin/attendance
 
 demo: build
 	./bin/attendance demo --no-login

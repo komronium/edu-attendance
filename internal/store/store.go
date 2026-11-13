@@ -72,29 +72,89 @@ create table if not exists oxu_snapshot (
 );
 `
 
-// Store wraps the database. All access goes through one connection, which also serialises writers.
-type Store struct{ db *sql.DB }
+// Store wraps the database. All access goes through one connection, which also serialises writers:
+// never query s.db while holding a transaction from s.tx, it would wait for itself.
+type Store struct {
+	db   *sql.DB
+	path string // "" for an in-memory database
+}
 
-// Open opens (and migrates) the database at path; ":memory:" gives a throw-away one.
+// liveIDs is the lessons that are not deleted, for queries on attendance.
+const liveIDs = "(select id from sessions where deleted_at is null)"
+
+// columnsAdded are the columns migrate adds to older databases, by table.
+var columnsAdded = map[string][]string{
+	"sessions":   {"finished_at", "para", "deleted_at"},
+	"attendance": {"retake_time", "retake_room", "grade", "retake_session_id"},
+}
+
+// BackupDir is where the automatic copies of the database at path go.
+func BackupDir(path string) string { return filepath.Join(filepath.Dir(path), "backups") }
+
+// Open opens (and migrates) the database at path; ":memory:" gives a throw-away one. An existing file
+// that is about to get a new column is copied to BackupDir(path) first, and a failed copy stops the open.
 func Open(path string) (*Store, error) {
 	dsn := path + "?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"
+	s := &Store{}
 	if path != ":memory:" {
+		s.path = path
 		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 			return nil, err
 		}
 		dsn += "&_pragma=journal_mode(wal)"
+		if needs, err := needsMigration(path); err != nil {
+			return nil, err
+		} else if needs {
+			if _, err := Backup(path, BackupDir(path), 0); err != nil {
+				return nil, fmt.Errorf("backup before migrating: %w", err)
+			}
+		}
 	}
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	s := &Store{db: db}
+	s.db = db
 	if err := s.migrate(); err != nil {
 		db.Close()
 		return nil, err
 	}
+	if err := s.purgeDeleted(); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if s.path != "" {
+		os.Chmod(s.path, 0o600) // names and grades: the owner only
+	}
 	return s, nil
+}
+
+// needsMigration reports whether an existing database lacks a column migrate would add.
+func needsMigration(path string) (bool, error) {
+	if info, err := os.Stat(path); err != nil || info.Size() == 0 {
+		return false, nil // a new database: nothing to keep
+	}
+	db, err := sql.Open("sqlite", "file:"+path+"?mode=ro&_pragma=busy_timeout(5000)")
+	if err != nil {
+		return false, err
+	}
+	defer db.Close()
+	for table, want := range columnsAdded {
+		cols, err := columns(db, table)
+		if err != nil {
+			return false, err
+		}
+		if len(cols) == 0 {
+			continue // the table does not exist yet: it is created whole
+		}
+		for _, c := range want {
+			if !cols[c] {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }
@@ -191,6 +251,11 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if !scols["deleted_at"] { // a deleted lesson is kept for 30 days so it can be restored
+		if _, err := s.db.Exec("alter table sessions add column deleted_at real"); err != nil {
+			return err
+		}
+	}
 	// existing lessons: the first of a day is para 1, the next para 2
 	if err := s.tx(func(tx *sql.Tx) error {
 		days, err := list(tx, "select distinct date from sessions where para is null", nil, func(r *sql.Rows) (string, error) {
@@ -267,11 +332,15 @@ func (s *Store) SetKPIMark(period, item any, done bool) error {
 	if err != nil {
 		return err
 	}
+	return setKPIMark(s.db, p, title, done)
+}
+
+func setKPIMark(q querier, p, title string, done bool) error {
 	if !done {
-		_, err := s.db.Exec("delete from kpi_marks where period=? and item=?", p, title)
+		_, err := q.Exec("delete from kpi_marks where period=? and item=?", p, title)
 		return err
 	}
-	_, err = s.db.Exec("insert into kpi_marks (period, item, done, updated_at) values (?, ?, 1, ?)"+
+	_, err := q.Exec("insert into kpi_marks (period, item, done, updated_at) values (?, ?, 1, ?)"+
 		" on conflict (period, item) do update set done = 1, updated_at = excluded.updated_at", p, title, now())
 	return err
 }
@@ -285,6 +354,18 @@ type Notification struct {
 	Link      string   `json:"link"`
 	CreatedAt float64  `json:"created_at"`
 	ReadAt    *float64 `json:"read_at"`
+}
+
+// PruneNotifications deletes notices that were read more than 90 days ago; unread ones stay.
+func (s *Store) PruneNotifications() error {
+	_, err := s.db.Exec("delete from notifications where read_at is not null and read_at < ?", now()-90*86400)
+	return err
+}
+
+// Ping checks that the database answers.
+func (s *Store) Ping() error {
+	var one int
+	return s.db.QueryRow("select 1").Scan(&one)
 }
 
 func (s *Store) AddNotification(kind, title, body, link string) error {
@@ -405,6 +486,12 @@ func (s *Store) KPIProgress() ([]KPIProgress, error) {
 // SetKPIProgress saves the finished stages of an item for a month; 0 clears it, and -1 marks the item
 // as one that cannot be done this month (it then leaves the open items and the reminders).
 func (s *Store) SetKPIProgress(period, item, step any) error {
+	return s.SetKPIStep(period, item, step, nil)
+}
+
+// SetKPIStep is SetKPIProgress that can also set or clear the item's tick (done non-nil) in the same step:
+// finishing the last stage ticks the item, and the two must never disagree.
+func (s *Store) SetKPIStep(period, item, step any, done *bool) error {
 	p, _ := period.(string)
 	if !periodRe.MatchString(p) {
 		return invalid("oy noto'g'ri")
@@ -417,13 +504,20 @@ func (s *Store) SetKPIProgress(period, item, step any) error {
 	if !ok || n < -1 || n > 12 || n != float64(int(n)) {
 		return invalid("bosqich noto'g'ri")
 	}
-	if n == 0 {
-		_, err := s.db.Exec("delete from kpi_progress where period=? and item=?", p, title)
-		return err
-	}
-	_, err = s.db.Exec("insert into kpi_progress (period, item, step, updated_at) values (?, ?, ?, ?)"+
-		" on conflict (period, item) do update set step = excluded.step, updated_at = excluded.updated_at", p, title, int(n), now())
-	return err
+	return s.tx(func(tx *sql.Tx) error {
+		if n == 0 {
+			if _, err := tx.Exec("delete from kpi_progress where period=? and item=?", p, title); err != nil {
+				return err
+			}
+		} else if _, err := tx.Exec("insert into kpi_progress (period, item, step, updated_at) values (?, ?, ?, ?)"+
+			" on conflict (period, item) do update set step = excluded.step, updated_at = excluded.updated_at", p, title, int(n), now()); err != nil {
+			return err
+		}
+		if done == nil {
+			return nil
+		}
+		return setKPIMark(tx, p, title, *done)
+	})
 }
 
 // KPISteps returns the stage names the teacher set, by item. They apply to every month.
@@ -529,11 +623,7 @@ func (s *Store) CoursePlanHours() (*float64, error) {
 }
 
 // SetCoursePlanHours saves the planned hours; null or an empty value clears them.
-func (s *Store) SetCoursePlanHours(hours any) error {
-	if hours == nil || hours == "" {
-		_, err := s.db.Exec("delete from settings where key = 'course_plan_hours'")
-		return err
-	}
+func cleanHours(hours any) (float64, error) {
 	var v float64
 	switch t := hours.(type) {
 	case float64:
@@ -541,16 +631,28 @@ func (s *Store) SetCoursePlanHours(hours any) error {
 	case string:
 		parsed, err := strconv.ParseFloat(strings.TrimSpace(t), 64)
 		if err != nil {
-			return invalid("soat raqam bo'lishi kerak")
+			return 0, invalid("soat raqam bo'lishi kerak")
 		}
 		v = parsed
 	default:
-		return invalid("soat raqam bo'lishi kerak")
+		return 0, invalid("soat raqam bo'lishi kerak")
 	}
 	if !(v >= 0 && v <= 2000) {
-		return invalid("soat 0 va 2000 orasida bo'lsin")
+		return 0, invalid("soat 0 va 2000 orasida bo'lsin")
 	}
-	_, err := s.db.Exec("insert into settings (key, value) values ('course_plan_hours', ?)"+
+	return v, nil
+}
+
+func (s *Store) SetCoursePlanHours(hours any) error {
+	if hours == nil || hours == "" {
+		_, err := s.db.Exec("delete from settings where key = 'course_plan_hours'")
+		return err
+	}
+	v, err := cleanHours(hours)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec("insert into settings (key, value) values ('course_plan_hours', ?)"+
 		" on conflict (key) do update set value = excluded.value", strconv.FormatFloat(v, 'f', -1, 64))
 	return err
 }
@@ -585,11 +687,45 @@ func (s *Store) Semester() (Semester, error) {
 	return out, rows.Err()
 }
 
-// SetSemester saves the semester's first day (YYYY-MM-DD) and its length in weeks.
-func (s *Store) SetSemester(start any, weeks any) error {
+// NewSemester starts the next semester: a copy of the database first (a failed copy changes nothing),
+// then the new start and length, every student archived (their lessons and debts stay, under the old
+// semester), and the course's planned hours when given (nil keeps them). It returns the copy's path.
+func (s *Store) NewSemester(start, weeks, planHours any) (string, error) {
+	date, n, err := cleanSemester(start, weeks)
+	if err != nil {
+		return "", err
+	}
+	if planHours != nil && planHours != "" {
+		if _, err := cleanHours(planHours); err != nil {
+			return "", err
+		}
+	}
+	backup := ""
+	if s.path != "" {
+		if backup, err = Backup(s.path, BackupDir(s.path), 0); err != nil {
+			return "", fmt.Errorf("backup before a new semester: %w", err)
+		}
+	}
+	return backup, s.tx(func(tx *sql.Tx) error {
+		if err := saveSemester(tx, date, n); err != nil {
+			return err
+		}
+		if _, err := tx.Exec("update students set active = 0"); err != nil {
+			return err
+		}
+		if planHours != nil && planHours != "" {
+			v, _ := cleanHours(planHours)
+			_, err := tx.Exec("insert into settings (key, value) values ('course_plan_hours', ?) on conflict (key) do update set value = excluded.value", strconv.FormatFloat(v, 'f', -1, 64))
+			return err
+		}
+		return nil
+	})
+}
+
+func cleanSemester(start, weeks any) (string, int, error) {
 	date, err := cleanDate(start)
 	if err != nil {
-		return err
+		return "", 0, err
 	}
 	n := -1
 	switch t := weeks.(type) {
@@ -603,27 +739,41 @@ func (s *Store) SetSemester(start any, weeks any) error {
 		}
 	}
 	if n < 4 || n > 30 {
-		return invalid("haftalar 4 va 30 orasida bo'lsin")
+		return "", 0, invalid("haftalar 4 va 30 orasida bo'lsin")
 	}
-	return s.tx(func(tx *sql.Tx) error {
-		if _, err := tx.Exec("delete from settings where key = 'semester_days'"); err != nil {
+	return date, n, nil
+}
+
+func saveSemester(tx *sql.Tx, date string, n int) error {
+	if _, err := tx.Exec("delete from settings where key = 'semester_days'"); err != nil {
+		return err
+	}
+	for k, v := range map[string]string{"semester_start": date, "semester_weeks": strconv.Itoa(n)} {
+		if _, err := tx.Exec("insert into settings (key, value) values (?, ?) on conflict (key) do update set value = excluded.value", k, v); err != nil {
 			return err
 		}
-		for k, v := range map[string]string{"semester_start": date, "semester_weeks": strconv.Itoa(n)} {
-			if _, err := tx.Exec("insert into settings (key, value) values (?, ?) on conflict (key) do update set value = excluded.value", k, v); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
+	}
+	return nil
+}
+
+// SetSemester saves the semester's first day (YYYY-MM-DD) and its length in weeks.
+func (s *Store) SetSemester(start any, weeks any) error {
+	date, n, err := cleanSemester(start, weeks)
+	if err != nil {
+		return err
+	}
+	return s.tx(func(tx *sql.Tx) error { return saveSemester(tx, date, n) })
 }
 
 // ---------------------------------------------------------------- digital.oxu.uz snapshot
 
 // SaveOxu replaces the data last synced from digital.oxu.uz (JSON).
-func (s *Store) SaveOxu(data []byte) error {
+func (s *Store) SaveOxu(data []byte) error { return s.SaveOxuAt(data, now()) }
+
+// SaveOxuAt is SaveOxu with the sync time given (the demo uses it to look out of date).
+func (s *Store) SaveOxuAt(data []byte, at float64) error {
 	_, err := s.db.Exec("insert into oxu_snapshot (id, synced_at, data) values (1, ?, ?)"+
-		" on conflict (id) do update set synced_at = excluded.synced_at, data = excluded.data", now(), string(data))
+		" on conflict (id) do update set synced_at = excluded.synced_at, data = excluded.data", at, string(data))
 	return err
 }
 
@@ -759,7 +909,7 @@ const studentsSQL = `
            coalesce(sum(1 - a.present), 0) as missed,
            coalesce(sum(case when a.present = 0 and a.retake_at is not null then 1 else 0 end), 0) as retaken,
            round(coalesce(sum(a.grade), 0), 1) as points, count(a.grade) as graded
-    from students s left join attendance a on a.student_id = s.id
+    from students s left join attendance a on a.student_id = s.id and a.session_id in ` + liveIDs + `
     %s
     group by s.id order by s.active desc, s.name collate nocase`
 
@@ -794,7 +944,7 @@ func (s *Store) Student(id int64) (*StudentDetail, error) {
 	}
 	history, err := list(s.db, `
         select se.id, se.date, se.para, se.started_at, se.room, se.topic, a.present, a.retake_at, a.retake_time, a.retake_room, a.grade
-        from attendance a join sessions se on se.id = a.session_id
+        from attendance a join sessions se on se.id = a.session_id and se.deleted_at is null
         where a.student_id = ? order by se.date desc, se.para desc`, []any{id}, func(r *sql.Rows) (HistoryRow, error) {
 		var h HistoryRow
 		err := r.Scan(&h.SessionID, &h.Date, &h.Para, &h.StartedAt, &h.Room, &h.Topic, &h.Present, &h.RetakeAt, &h.RetakeTime, &h.RetakeRoom, &h.Grade)
@@ -835,10 +985,42 @@ type SessionStudent struct {
 type SessionDetail struct {
 	Session
 	Students []SessionStudent `json:"students"`
+	// Missing are the active students who are not on this lesson's list, e.g. added after it started.
+	Missing []StudentRef `json:"missing"`
+}
+
+// StudentRef names a student.
+type StudentRef struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}
+
+// AddToSession puts a student on a lesson's list that does not have them yet (a student added, or back
+// from the archive, after the lesson started). Adding one who is there already changes nothing.
+func (s *Store) AddToSession(sessionID, studentID int64, present bool) error {
+	return s.tx(func(tx *sql.Tx) error {
+		for _, q := range []string{"select 1 from sessions where id=? and deleted_at is null", "select 1 from students where id=?"} {
+			id := sessionID
+			if strings.Contains(q, "students") {
+				id = studentID
+			}
+			if ok, err := exists(tx, q, id); err != nil {
+				return err
+			} else if !ok {
+				return ErrNotFound
+			}
+		}
+		p := 0
+		if present {
+			p = 1
+		}
+		_, err := tx.Exec("insert or ignore into attendance (session_id, student_id, present) values (?, ?, ?)", sessionID, studentID, p)
+		return err
+	})
 }
 
 func freePara(q querier, day string) (*int, error) {
-	taken, err := list(q, "select para from sessions where date=?", []any{day}, func(r *sql.Rows) (int64, error) {
+	taken, err := list(q, "select para from sessions where date=? and deleted_at is null", []any{day}, func(r *sql.Rows) (int64, error) {
 		var p sql.NullInt64
 		err := r.Scan(&p)
 		return p.Int64, err
@@ -904,7 +1086,7 @@ func (s *Store) StartSession(day, room, topic, para any, startedAt float64) (int
 			}
 			p = *fp
 		}
-		if taken, err := exists(tx, "select 1 from sessions where date=? and para=?", d, p); err != nil {
+		if taken, err := exists(tx, "select 1 from sessions where date=? and para=? and deleted_at is null", d, p); err != nil {
 			return err
 		} else if taken {
 			return invalid("bu kunda %d-para allaqachon bor", p)
@@ -935,12 +1117,13 @@ func (s *Store) Sessions() ([]Session, error) {
 	return list(s.db, `
         select `+sessionCols+`, count(a.student_id) as total, coalesce(sum(a.present), 0) as came
         from sessions se left join attendance a on a.session_id = se.id
+        where se.deleted_at is null
         group by se.id order by se.date desc, se.para desc, se.started_at desc`, nil, scanSession)
 }
 
 func (s *Store) Session(id int64) (*SessionDetail, error) {
 	found, err := list(s.db, `
-        select `+sessionCols+`, 0, 0 from sessions se where se.id = ?`, []any{id}, scanSession)
+        select `+sessionCols+`, 0, 0 from sessions se where se.id = ? and se.deleted_at is null`, []any{id}, scanSession)
 	if err != nil {
 		return nil, err
 	}
@@ -957,7 +1140,17 @@ func (s *Store) Session(id int64) (*SessionDetail, error) {
 	if err != nil {
 		return nil, err
 	}
-	d := &SessionDetail{Session: found[0], Students: students}
+	missing, err := list(s.db, `select id, name from students where active = 1
+        and id not in (select student_id from attendance where session_id = ?) order by name collate nocase`, []any{id},
+		func(r *sql.Rows) (StudentRef, error) {
+			var x StudentRef
+			err := r.Scan(&x.ID, &x.Name)
+			return x, err
+		})
+	if err != nil {
+		return nil, err
+	}
+	d := &SessionDetail{Session: found[0], Students: students, Missing: missing}
 	d.Total = int64(len(students))
 	for _, st := range students {
 		d.Came += st.Present
@@ -973,7 +1166,7 @@ func (s *Store) UpdateSession(id int64, day, room, topic, para any) error {
 		if day != nil || para != nil {
 			var curDay string
 			var curPara sql.NullInt64
-			err := tx.QueryRow("select date, para from sessions where id=?", id).Scan(&curDay, &curPara)
+			err := tx.QueryRow("select date, para from sessions where id=? and deleted_at is null", id).Scan(&curDay, &curPara)
 			if errors.Is(err, sql.ErrNoRows) {
 				return ErrNotFound
 			} else if err != nil {
@@ -990,7 +1183,7 @@ func (s *Store) UpdateSession(id int64, day, room, topic, para any) error {
 					return err
 				}
 			}
-			if clash, err := exists(tx, "select 1 from sessions where date=? and para=? and id<>?", newDay, newPara, id); err != nil {
+			if clash, err := exists(tx, "select 1 from sessions where date=? and para=? and id<>? and deleted_at is null", newDay, newPara, id); err != nil {
 				return err
 			} else if clash {
 				return invalid("bu kunda %d-para allaqachon bor", newPara)
@@ -1014,7 +1207,7 @@ func (s *Store) UpdateSession(id int64, day, room, topic, para any) error {
 			sets = append(sets, "topic=?")
 			args = append(args, clean)
 		}
-		if ok, err := exists(tx, "select 1 from sessions where id=?", id); err != nil {
+		if ok, err := exists(tx, "select 1 from sessions where id=? and deleted_at is null", id); err != nil {
 			return err
 		} else if !ok {
 			return ErrNotFound
@@ -1033,7 +1226,7 @@ func (s *Store) FinishSession(id int64, topic any, finishedAt float64) error {
 		finishedAt = now()
 	}
 	return s.tx(func(tx *sql.Tx) error {
-		if ok, err := exists(tx, "select 1 from sessions where id=?", id); err != nil {
+		if ok, err := exists(tx, "select 1 from sessions where id=? and deleted_at is null", id); err != nil {
 			return err
 		} else if !ok {
 			return ErrNotFound
@@ -1057,7 +1250,7 @@ func (s *Store) FinishSession(id int64, topic any, finishedAt float64) error {
 func (s *Store) Rooms() ([]string, error) {
 	return list(s.db, `
         select retake_room, max(retake_at || ' ' || retake_time) as last from attendance
-        where retake_room is not null and retake_room <> '' group by retake_room order by last desc limit 20`, nil,
+        where retake_room is not null and retake_room <> '' and session_id in `+liveIDs+` group by retake_room order by last desc limit 20`, nil,
 		func(r *sql.Rows) (string, error) {
 			var room string
 			var last sql.NullString
@@ -1066,20 +1259,55 @@ func (s *Store) Rooms() ([]string, error) {
 		})
 }
 
+// DeleteSession takes a lesson away: with its attendance, grades and retakes it disappears everywhere,
+// but is kept for 30 days (deleted_at) so RestoreSession can bring it back whole.
 func (s *Store) DeleteSession(id int64) error {
-	return affected(s.db.Exec("delete from sessions where id=?", id))
+	return affected(s.db.Exec("update sessions set deleted_at=? where id=? and deleted_at is null", now(), id))
+}
+
+// RestoreSession brings a deleted lesson back, unless its day and para were taken meanwhile.
+func (s *Store) RestoreSession(id int64) error {
+	return s.tx(func(tx *sql.Tx) error {
+		var day string
+		var para sql.NullInt64
+		err := tx.QueryRow("select date, para from sessions where id=? and deleted_at is not null", id).Scan(&day, &para)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		} else if err != nil {
+			return err
+		}
+		if clash, err := exists(tx, "select 1 from sessions where date=? and para=? and deleted_at is null", day, para.Int64); err != nil {
+			return err
+		} else if clash {
+			return invalid("bu kunda %d-para allaqachon bor", para.Int64)
+		}
+		_, err = tx.Exec("update sessions set deleted_at=null where id=?", id)
+		return err
+	})
+}
+
+// keepDeletedDays is how long a deleted lesson can be restored.
+const keepDeletedDays = 30
+
+func (s *Store) purgeDeleted() error {
+	_, err := s.db.Exec("delete from sessions where deleted_at is not null and deleted_at < ?", now()-keepDeletedDays*86400)
+	return err
 }
 
 func (s *Store) SetPresent(sessionID, studentID int64, present bool) error {
+	return setPresent(s.db, sessionID, studentID, present)
+}
+
+func setPresent(q querier, sessionID, studentID int64, present bool) error {
 	p := 0
 	if present {
 		p = 1
 	}
 	// coming back to "present" also clears a retake that no longer applies, all of it
-	return affected(s.db.Exec(
+	return affected(q.Exec(
 		"update attendance set present=?, retake_at=case when ? then null else retake_at end,"+
 			" retake_time=case when ? then null else retake_time end, retake_room=case when ? then null else retake_room end,"+
-			" retake_session_id=case when ? then null else retake_session_id end where session_id=? and student_id=?",
+			" retake_session_id=case when ? then null else retake_session_id end where session_id=? and student_id=? and session_id in "+liveIDs,
 		p, p, p, p, p, sessionID, studentID))
 }
 
@@ -1089,16 +1317,52 @@ func (s *Store) SetGrade(sessionID, studentID int64, grade any) error {
 	if err != nil {
 		return err
 	}
+	return setGrade(s.db, sessionID, studentID, value)
+}
+
+func setGrade(q querier, sessionID, studentID int64, value *float64) error {
 	var arg any
 	if value != nil {
 		arg = *value
 	}
-	return affected(s.db.Exec("update attendance set grade=? where session_id=? and student_id=?", arg, sessionID, studentID))
+	return affected(q.Exec("update attendance set grade=? where session_id=? and student_id=? and session_id in "+liveIDs, arg, sessionID, studentID))
 }
 
+// UpdateMark changes a student's presence and/or grade on a lesson in one step: both are checked first
+// and both are saved, or neither. present nil and hasGrade false leave that part alone.
+func (s *Store) UpdateMark(sessionID, studentID int64, present *bool, hasGrade bool, grade any) error {
+	var value *float64
+	if hasGrade {
+		v, err := parseGrade(grade)
+		if err != nil {
+			return err
+		}
+		value = v
+	}
+	return s.tx(func(tx *sql.Tx) error {
+		if present != nil {
+			if err := setPresent(tx, sessionID, studentID, *present); err != nil {
+				return err
+			}
+		}
+		if hasGrade {
+			return setGrade(tx, sessionID, studentID, value)
+		}
+		return nil
+	})
+}
+
+// SetAllPresent marks everyone on the lesson's roster as present; ErrNotFound if there is no such lesson.
 func (s *Store) SetAllPresent(sessionID int64) error {
-	_, err := s.db.Exec("update attendance set present=1, retake_at=null, retake_time=null, retake_room=null, retake_session_id=null where session_id=?", sessionID)
-	return err
+	return s.tx(func(tx *sql.Tx) error {
+		if ok, err := exists(tx, "select 1 from sessions where id=? and deleted_at is null", sessionID); err != nil {
+			return err
+		} else if !ok {
+			return ErrNotFound
+		}
+		_, err := tx.Exec("update attendance set present=1, retake_at=null, retake_time=null, retake_room=null, retake_session_id=null where session_id=?", sessionID)
+		return err
+	})
 }
 
 // ---------------------------------------------------------------- retakes
@@ -1129,7 +1393,7 @@ func (s *Store) Retakes() (*Retakes, error) {
 	items, err := list(s.db, `
         select a.session_id, a.student_id, st.name, st.active, se.date, se.para, se.topic,
                a.retake_at, a.retake_time, a.retake_room
-        from attendance a join students st on st.id = a.student_id join sessions se on se.id = a.session_id
+        from attendance a join students st on st.id = a.student_id join sessions se on se.id = a.session_id and se.deleted_at is null
         where a.present = 0 order by se.date desc, se.para desc, st.name collate nocase`, nil, func(r *sql.Rows) (Retake, error) {
 		var x Retake
 		err := r.Scan(&x.SessionID, &x.StudentID, &x.Name, &x.Active, &x.Date, &x.Para, &x.Topic, &x.RetakeAt, &x.RetakeTime, &x.RetakeRoom)
@@ -1171,131 +1435,9 @@ func (s *Store) SetRetake(sessionID, studentID int64, done bool, day, at, room a
 	}
 	return affected(s.db.Exec(
 		"update attendance set retake_at=?, retake_time=?, retake_room=?, retake_session_id=null"+
-			" where session_id=? and student_id=? and present=0", vals[0], vals[1], vals[2], sessionID, studentID))
+			" where session_id=? and student_id=? and present=0 and session_id in "+liveIDs, vals[0], vals[1], vals[2], sessionID, studentID))
 }
 
-// ---------------------------------------------------------------- retake sessions
-
-// RetakeSession is one sitting in which retakes are accepted.
-type RetakeSession struct {
-	ID         int64    `json:"id"`
-	Date       string   `json:"date"`
-	StartedAt  float64  `json:"started_at"`
-	FinishedAt *float64 `json:"finished_at"`
-	Room       string   `json:"room"`
-	Accepted   int64    `json:"accepted"`
-}
-
-// RetakeItem is a missed lesson offered in a retake sitting.
-type RetakeItem struct {
-	SessionID       int64  `json:"session_id"`
-	StudentID       int64  `json:"student_id"`
-	Name            string `json:"name"`
-	Date            string `json:"date"`
-	Para            *int64 `json:"para"`
-	Topic           string `json:"topic"`
-	RetakeSessionID *int64 `json:"retake_session_id"`
-}
-
-// RetakeSessionDetail is a sitting with everything still owed plus what it accepted.
-type RetakeSessionDetail struct {
-	RetakeSession
-	Items []RetakeItem `json:"items"`
-}
-
-// StartRetakeSession starts accepting retakes; the room comes at the end. A zero startedAt means now.
-func (s *Store) StartRetakeSession(day any, startedAt float64) (int64, error) {
-	d, err := cleanDate(day)
-	if err != nil {
-		return 0, err
-	}
-	if startedAt == 0 {
-		startedAt = now()
-	}
-	res, err := s.db.Exec("insert into retake_sessions (date, started_at) values (?, ?)", d, startedAt)
-	if err != nil {
-		return 0, err
-	}
-	return res.LastInsertId()
-}
-
-func (s *Store) RetakeSessions() ([]RetakeSession, error) {
-	return list(s.db, `
-        select rs.id, rs.date, rs.started_at, rs.finished_at, rs.room, count(a.session_id) as accepted from retake_sessions rs
-        left join attendance a on a.retake_session_id = rs.id
-        group by rs.id order by rs.date desc, rs.started_at desc`, nil, func(r *sql.Rows) (RetakeSession, error) {
-		var x RetakeSession
-		err := r.Scan(&x.ID, &x.Date, &x.StartedAt, &x.FinishedAt, &x.Room, &x.Accepted)
-		return x, err
-	})
-}
-
-func (s *Store) RetakeSession(id int64) (*RetakeSessionDetail, error) {
-	var d RetakeSessionDetail
-	err := s.db.QueryRow("select id, date, started_at, finished_at, room from retake_sessions where id=?", id).
-		Scan(&d.ID, &d.Date, &d.StartedAt, &d.FinishedAt, &d.Room)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
-	} else if err != nil {
-		return nil, err
-	}
-	// everything still owed, plus what was accepted in this sitting (so a mistake can be undone)
-	d.Items, err = list(s.db, `
-        select a.session_id, a.student_id, st.name, se.date, se.para, se.topic, a.retake_session_id
-        from attendance a join students st on st.id = a.student_id join sessions se on se.id = a.session_id
-        where a.present = 0 and (a.retake_at is null or a.retake_session_id = ?)
-        order by st.name collate nocase, se.date, se.para`, []any{id}, func(r *sql.Rows) (RetakeItem, error) {
-		var x RetakeItem
-		err := r.Scan(&x.SessionID, &x.StudentID, &x.Name, &x.Date, &x.Para, &x.Topic, &x.RetakeSessionID)
-		return x, err
-	})
-	if err != nil {
-		return nil, err
-	}
-	for _, x := range d.Items {
-		if x.RetakeSessionID != nil && *x.RetakeSessionID == id {
-			d.Accepted++
-		}
-	}
-	return &d, nil
-}
-
-func (s *Store) AcceptRetake(retakeSessionID, sessionID, studentID int64, done bool) error {
-	return s.tx(func(tx *sql.Tx) error {
-		var day string
-		err := tx.QueryRow("select date from retake_sessions where id=?", retakeSessionID).Scan(&day)
-		if errors.Is(err, sql.ErrNoRows) {
-			return ErrNotFound
-		} else if err != nil {
-			return err
-		}
-		if done {
-			return affected(tx.Exec(
-				"update attendance set retake_at=?, retake_session_id=? where session_id=? and student_id=? and present=0"+
-					" and (retake_at is null or retake_session_id=?)", day, retakeSessionID, sessionID, studentID, retakeSessionID))
-		}
-		return affected(tx.Exec(
-			"update attendance set retake_at=null, retake_session_id=null where session_id=? and student_id=? and retake_session_id=?",
-			sessionID, studentID, retakeSessionID))
-	})
-}
-
-func (s *Store) FinishRetakeSession(id int64, room any, finishedAt float64) error {
-	r, err := cleanText(room, "xona", 40, true)
-	if err != nil {
-		return err
-	}
-	if finishedAt == 0 {
-		finishedAt = now()
-	}
-	return affected(s.db.Exec("update retake_sessions set room=?, finished_at=coalesce(finished_at, ?) where id=?", r, finishedAt, id))
-}
-
-func (s *Store) DeleteRetakeSession(id int64) error {
-	return s.tx(func(tx *sql.Tx) error {
-		if _, err := tx.Exec("update attendance set retake_at=null, retake_session_id=null where retake_session_id=?", id); err != nil {
-			return err
-		}
-		return affected(tx.Exec("delete from retake_sessions where id=?", id))
-	})
-}
+// Retake sittings (retake_sessions, attendance.retake_session_id) are kept in the schema: old databases
+// and `import` have them. The app no longer has screens or routes for them; retakes are recorded one by
+// one (SetRetake), and SetPresent still clears a sitting's mark.

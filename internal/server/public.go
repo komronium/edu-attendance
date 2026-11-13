@@ -45,28 +45,30 @@ type publicPage struct {
 var publicTmpl = template.Must(template.New("public").Parse(`<!doctype html>
 <html lang="uz"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow"><title>Qayta topshirish{{if .Title}} · {{.Title}}{{end}}</title>
-<script src="/theme.js"></script><link rel="stylesheet" href="/app.css"></head>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml"><script src="/theme.js"></script><link rel="stylesheet" href="/app.css"></head>
 <body class="public"><main class="public-page">
 <header class="page-head"><div><h1>Qayta topshirish</h1>
 <p class="sub">{{if .Title}}{{.Title}} · {{end}}{{.Updated}} holatiga</p></div></header>
 <div class="tiles">
-<div class="tile"><span class="label">Qarzi bor talabalar</span><b>{{len .Students}}</b></div>
-<div class="tile"><span class="label">Topshirilmagan darslar</span><b>{{.Owed}}</b></div>
-<div class="tile"><span class="label">Topshirilgan</span><b>{{.Retaken}}</b></div>
+<div class="tile"><span class="label">Qarzi bor talabalar</span><b>{{len .Students}} <small>ta talaba</small></b></div>
+<div class="tile"><span class="label">Topshirilmagan darslar</span><b>{{.Owed}} <small>ta dars</small></b></div>
+<div class="tile"><span class="label">Topshirilgan darslar</span><b>{{.Retaken}} <small>ta dars</small></b></div>
 </div>
 <p class="sub">Qoldirilgan har bir darsning mavzusini o'qituvchiga qayta topshirasiz. Topshirilgan dars bu ro'yxatdan o'zi chiqib ketadi.</p>
-{{if .Students}}<div class="public-list">{{range .Students}}
+{{if .Students}}<p id="public-find" class="public-find" hidden><input type="search" placeholder="Ismingizni yozing" autocomplete="off" aria-label="Ism bo'yicha qidirish"></p>
+<p id="public-none" class="card empty" hidden>Bunday talaba ro'yxatda yo'q.</p>
+<div class="public-list">{{range .Students}}
 <section class="card">
 <h2><span>{{.Name}}</span><span class="badge">{{len .Lessons}}</span></h2>
 <ul class="plain">{{range .Lessons}}<li><span class="when"><b>{{.Day}}</b>{{if .Para}}<small>{{.Para}}-para</small>{{end}}</span><span{{if not .Topic}} class="muted"{{end}}>{{if .Topic}}{{.Topic}}{{else}}Mavzu yozilmagan{{end}}</span></li>{{end}}</ul>
 </section>{{end}}</div>
 {{else}}<p class="card empty">Hozir hech kimda qarz yo'q.</p>{{end}}
-</main></body></html>`))
+</main><script src="/public.js"></script></body></html>`))
 
 const publicGone = `<!doctype html>
 <html lang="uz"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow"><title>Havola ishlamaydi</title>
-<script src="/theme.js"></script><link rel="stylesheet" href="/app.css"></head>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml"><script src="/theme.js"></script><link rel="stylesheet" href="/app.css"></head>
 <body class="public"><main class="public-page"><p class="card empty">Bu havola eskirgan yoki noto'g'ri. Yangi havolani o'qituvchidan so'rang.</p></main></body></html>`
 
 func (s *Server) publicRetakes(w http.ResponseWriter, r *http.Request, token string) {
@@ -85,7 +87,8 @@ func (s *Server) publicRetakes(w http.ResponseWriter, r *http.Request, token str
 		http.Error(w, "ichki xato", http.StatusInternalServerError)
 		return
 	}
-	page := publicPage{Title: sh.Title, Updated: time.Now().In(store.Tashkent()).Format("02.01.2006 15:04")}
+	nowTs := time.Now().In(store.Tashkent())
+	page := publicPage{Title: sh.Title, Updated: nowTs.Format("2") + "-" + uzMonths[nowTs.Month()-1] + ", " + nowTs.Format("15:04")}
 	byName := map[int64]*publicStudent{}
 	var order []int64
 	for _, x := range rt.Items {

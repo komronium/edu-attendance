@@ -23,6 +23,9 @@ const (
 	syncTimeout   = 70 * time.Second
 )
 
+// manualKey marks the context of a sync the owner asked for (for the log only).
+type manualKey struct{}
+
 var (
 	errNoCookie = errors.New("no cookie")
 	errNoOwner  = errors.New("no owner")
@@ -100,11 +103,12 @@ func (s *Syncer) Snapshot() ([]byte, float64) {
 
 // Status reports the current state.
 func (s *Syncer) Status() SyncStatus {
+	owner, _ := s.db.OxuOwner() // read before taking the lock: a sync holding the database must not stall it
+	_, at := s.Snapshot()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	st := SyncStatus{HasCookie: s.cookie != "", State: s.state, Running: s.running, Warnings: s.warnings, WrongID: s.wrongID}
-	st.Owner, _ = s.db.OxuOwner()
-	if _, at := s.Snapshot(); at > 0 {
+	st := SyncStatus{HasCookie: s.cookie != "", State: s.state, Running: s.running, Warnings: s.warnings, WrongID: s.wrongID, Owner: owner}
+	if at > 0 {
 		st.LastSync = &at
 	}
 	if s.cookie != "" && s.state != "expired" {
@@ -186,7 +190,11 @@ func (s *Syncer) run(ctx context.Context, cookie string, replacing bool) ([]stri
 	}
 	s.running = true
 	s.mu.Unlock()
-	warnings, err := s.fetch(ctx, cookie, owner)
+	// a manual sync must not die with its request: the page may be closed or the proxy may give up,
+	// and a half-read site would then be reported as an error of the saved session
+	start := s.now()
+	warnings, err := s.fetch(context.WithoutCancel(ctx), cookie, owner)
+	slog.Info("oxu sync", "manual", ctx.Value(manualKey{}) != nil, "new_cookie", replacing, "ok", err == nil, "err", err, "warnings", len(warnings), "took", s.now().Sub(start).Round(time.Millisecond))
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -215,6 +223,9 @@ func (s *Syncer) run(ctx context.Context, cookie string, replacing bool) ([]stri
 		if err := s.keep(cookie); err != nil {
 			return nil, err
 		}
+	} else if s.cookie == "" { // forgotten while the sync ran: it stays forgotten
+		s.state, s.warnings, s.wrongID = "none", warnings, ""
+		return warnings, nil
 	}
 	s.state, s.warnings, s.wrongID = "ok", warnings, ""
 	return warnings, nil
@@ -247,6 +258,9 @@ func (s *Syncer) fetch(ctx context.Context, cookie, owner string) ([]string, err
 		if err := s.db.AddNotification(c.Kind, c.Title, c.Body, c.Link); err != nil {
 			slog.Error("notification", "err", err)
 		}
+	}
+	if err := s.db.PruneNotifications(); err != nil {
+		slog.Error("prune notifications", "err", err)
 	}
 	if warnings == nil {
 		warnings = []string{}

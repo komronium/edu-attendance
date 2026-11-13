@@ -10,6 +10,20 @@ const DEFAULT_APP = "https://davomat.lidersement.uz/";
 const APP_URLS = ["http://127.0.0.1/*", "http://localhost/*", "https://davomat.lidersement.uz/*"];
 const SAME_COOKIE_QUIET = 6 * 3600e3; // the same session is not sent again for six hours after it worked
 
+// Only these origins are ever treated as the attendance app: the session cookie of the university is
+// handed to a page of one of them and to nothing else. The manifest lets the bridge run on any localhost
+// port, so another page there could pretend to be the app; the exact origin (with its port) is checked here,
+// against the tab's real address. More origins (a demo on another port) are added on the options page.
+const DEFAULT_ORIGINS = ["https://davomat.lidersement.uz", "http://127.0.0.1:8766", "http://localhost:8766"];
+async function origins() {
+  const { origins: extra = [] } = await chrome.storage.local.get("origins");
+  return [...DEFAULT_ORIGINS, ...extra];
+}
+async function allowed(url) {
+  try { return (await origins()).includes(new URL(url).origin); } catch (err) { return false; }
+}
+const SITE_ORIGIN = new URL(SITE).origin;
+
 // kept in storage: a service worker is stopped when idle
 const get = async (k) => (await chrome.storage.session.get(k))[k] ?? null;
 const set = (k, v) => (v === null ? chrome.storage.session.remove(k) : chrome.storage.session.set({ [k]: v }));
@@ -29,7 +43,7 @@ async function trace(event, data) {
 
 async function appOrigin() {
   const { app } = await chrome.storage.local.get("app");
-  return app || DEFAULT_APP;
+  return app && (await allowed(app)) ? app : DEFAULT_APP;   // an address that is no longer allowed is forgotten
 }
 const tabExists = (id) => (id ? chrome.tabs.get(id).then(() => true, () => false) : Promise.resolve(false));
 
@@ -82,7 +96,10 @@ async function loggedIn(siteTab, pageCookie) {
   // every open attendance tab, the remembered address first; one opened before the extension was
   // last reloaded has lost its bridge and does not answer, so the next one is tried
   const origin = await appOrigin();
-  const open = (await chrome.tabs.query({ url: APP_URLS })).sort((a, b) => b.url.startsWith(origin) - a.url.startsWith(origin));
+  const found = await chrome.tabs.query({ url: APP_URLS });
+  const open = [];
+  for (const t of found) if (await allowed(t.url)) open.push(t);
+  open.sort((a, b) => b.url.startsWith(origin) - a.url.startsWith(origin));
   const tabs = [...new Set([(await tabExists(flow.app)) ? flow.app : null, ...open.map((t) => t.id)].filter(Boolean))];
   trace("targets", { flowApp: flow.app ?? null, tabs, asked });
   for (const app of tabs) {
@@ -101,6 +118,8 @@ async function deliver(appTab) {
   const pending = await get("pending");
   if (!pending) return false;
   try {
+    const tab = await chrome.tabs.get(appTab);
+    if (!(await allowed(tab.url))) { trace("refused", "deliver to " + (tab.url || "").slice(0, 40)); return false; }
     const answer = await chrome.tabs.sendMessage(appTab, { type: "cookie", cookie: pending.cookie });
     trace(answer && answer.taken ? "delivered" : "not taken", appTab);
     return !!(answer && answer.taken);
@@ -135,21 +154,27 @@ async function result(appTab, ok, quiet) {
 
 // a page loaded and logged in: remember where the app lives, and hand it a waiting cookie
 async function ready(tab) {
+  if (!(await allowed(tab.url))) return trace("refused", "ready from " + (tab.url || "").slice(0, 40));
   try { await chrome.storage.local.set({ app: new URL(tab.url).origin + "/" }); } catch (err) { /* keep the old one */ }
   const pending = await get("pending");
   if (!pending) return;
   if (Date.now() - pending.at > 30 * 60e3) { await set("pending", null); return; } // too old to trust
   const flow = (await get("flow")) || {};
-  if (!(await deliver(tab.id))) return;
+  if (!(await allowed(tab.url)) || !(await deliver(tab.id))) return;
   if (flow.app !== tab.id) await set("flow", { ...flow, app: tab.id, opened: false }); // the result comes from this tab
 }
 
-chrome.runtime.onMessage.addListener((msg, sender) => {
+chrome.runtime.onMessage.addListener((msg, sender) => {   // no reply is ever sent, so this is not async
   if (!msg || !sender.tab) return;
-  trace("msg", { type: msg.type, tab: sender.tab.id, url: (sender.tab.url || "").slice(0, 60), ok: msg.ok, quiet: msg.quiet });
-  const run = { start: () => start(sender.tab.id), page: () => loggedIn(sender.tab.id, typeof msg.cookie === "string" ? msg.cookie : ""), ready: () => ready(sender.tab),
-    result: () => result(sender.tab.id, msg.ok === true, msg.quiet === true) }[msg.type];
-  if (run) run().catch((err) => trace("error", { type: msg.type, err: String(err) }));
+  (async () => {
+    // the cookie comes only from the university's own pages; the app's messages only from allowed origins
+    const fromSite = (sender.tab.url || "").startsWith(SITE_ORIGIN + "/");
+    if (msg.type === "page" ? !fromSite : !(await allowed(sender.tab.url))) return trace("refused", { type: msg.type, url: (sender.tab.url || "").slice(0, 40) });
+    trace("msg", { type: msg.type, tab: sender.tab.id, url: (sender.tab.url || "").slice(0, 60), ok: msg.ok, quiet: msg.quiet });
+    const run = { start: () => start(sender.tab.id), page: () => loggedIn(sender.tab.id, typeof msg.cookie === "string" ? msg.cookie : ""), ready: () => ready(sender.tab),
+      result: () => result(sender.tab.id, msg.ok === true, msg.quiet === true) }[msg.type];
+    if (run) await run();
+  })().catch((err) => trace("error", { type: msg.type, err: String(err) }));
 });
 
 // a pending cookie whose app tab needs the app password: show it on the toolbar icon

@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/net/html"
@@ -26,6 +27,8 @@ const (
 	maxPage = 4 << 20
 
 	lastWeek = 2 // the site publishes the schedule only a little ahead
+
+	weekPagesAtOnce = 3 // timetable pages read in parallel; gentle on the site
 
 	// attendancePage is only ever linked to, never fetched: the teacher opens it in their own
 	// browser. Whether merely loading it changes anything on the site is unknown.
@@ -137,6 +140,13 @@ type Data struct {
 	Months  []Month  `json:"months"`
 
 	Periods []KPIPeriod `json:"periods"`
+
+	// Fetched is when each section was last read successfully (unix seconds), by section: lessons,
+	// unsaved, load, kpi, periods, months. A section that failed keeps its old value and its old time,
+	// so the page can tell how old each part is; the snapshot's own time only says when a sync ran.
+	Fetched map[string]float64 `json:"fetched,omitempty"`
+	// Warnings are the sections that failed in the sync that wrote this data.
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 // Client fetches pages with one session cookie.
@@ -237,12 +247,21 @@ func (c *Client) Sync(ctx context.Context, owner string, prev *Data) (*Data, []s
 	if prev != nil {
 		out = *prev
 	}
+	out.Fetched = map[string]float64{}
+	if prev != nil {
+		for k, v := range prev.Fetched {
+			out.Fetched[k] = v
+		}
+	}
 	var warnings []string
 	denied := 0
-	step := func(name string, fn func() error) error {
+	step := func(name, section string, fn func() error) error {
 		err := fn()
 		if errors.Is(err, ErrSession) {
 			return err
+		}
+		if err == nil {
+			out.Fetched[section] = float64(c.now().Unix())
 		}
 		if errors.Is(err, errDenied) {
 			denied++
@@ -253,45 +272,45 @@ func (c *Client) Sync(ctx context.Context, owner string, prev *Data) (*Data, []s
 		return nil
 	}
 	steps := []struct {
-		name string
-		fn   func() error
+		name, section string
+		fn            func() error
 	}{
-		{"jadval", func() error {
+		{"jadval", "lessons", func() error {
 			v, err := c.lessons(ctx)
 			if err == nil {
 				out.Lessons = v
 			}
 			return err
 		}},
-		{"davomat holati", func() error {
+		{"davomat holati", "unsaved", func() error {
 			v, err := c.unsaved(ctx)
 			if err == nil {
 				out.Unsaved = v
 			}
 			return err
 		}},
-		{"yuklama", func() error {
+		{"yuklama", "load", func() error {
 			v, err := c.load(ctx)
 			if err == nil {
 				out.Load = v
 			}
 			return err
 		}},
-		{"ilmiy KPI", func() error {
+		{"ilmiy KPI", "kpi", func() error {
 			v, err := c.kpi(ctx)
 			if err == nil {
 				out.KPI = v
 			}
 			return err
 		}},
-		{"KPI bandlari", func() error {
+		{"KPI bandlari", "periods", func() error {
 			v, err := c.periods(ctx)
 			if err == nil {
 				out.Periods = v
 			}
 			return err
 		}},
-		{"oylik KPI", func() error {
+		{"oylik KPI", "months", func() error {
 			v, err := c.months(ctx)
 			if err == nil {
 				out.Months = v
@@ -300,7 +319,7 @@ func (c *Client) Sync(ctx context.Context, owner string, prev *Data) (*Data, []s
 		}},
 	}
 	for _, s := range steps {
-		if err := step(s.name, s.fn); err != nil {
+		if err := step(s.name, s.section, s.fn); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -311,6 +330,7 @@ func (c *Client) Sync(ctx context.Context, owner string, prev *Data) (*Data, []s
 		return nil, nil, err
 	}
 	out.Account = owner
+	out.Warnings = warnings
 	return &out, warnings, nil
 }
 
@@ -319,16 +339,35 @@ func (c *Client) lessons(ctx context.Context) ([]Lesson, error) {
 	// the whole semester, because taught hours are counted from the schedule
 	now := c.now()
 	first := -int(now.Sub(semesterStart(now)).Hours()/(24*7)) - 1
-	for w := first; w <= lastWeek; w++ {
-		path := "/uqituvchi_dars_jadvali.asp"
-		if w != 0 {
-			path += "?week=" + strconv.Itoa(w)
+	weeks := make([][]Lesson, lastWeek-first+1)
+	errs := make([]error, len(weeks))
+	// a few pages at a time: a late-semester sync reads twenty weeks, one by one it nears the time limit
+	slots := make(chan struct{}, weekPagesAtOnce)
+	var wg sync.WaitGroup
+	for i := range weeks {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			slots <- struct{}{}
+			defer func() { <-slots }()
+			path := "/uqituvchi_dars_jadvali.asp"
+			if w := first + i; w != 0 {
+				path += "?week=" + strconv.Itoa(w)
+			}
+			doc, err := c.page(ctx, path)
+			if err != nil {
+				errs[i] = err
+				return
+			}
+			weeks[i] = parseLessons(doc)
+		}(i)
+	}
+	wg.Wait()
+	for i := range weeks { // in week order, and the first failure as it would have come one by one
+		if errs[i] != nil {
+			return nil, errs[i]
 		}
-		doc, err := c.page(ctx, path)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, parseLessons(doc)...)
+		out = append(out, weeks[i]...)
 	}
 	return out, nil
 }
@@ -375,7 +414,11 @@ func (c *Client) unsaved(ctx context.Context) ([]Lesson, error) {
 	if err != nil {
 		return nil, err
 	}
-	return parseUnsaved(doc), nil
+	list, ok := parseUnsaved(doc)
+	if !ok {
+		return nil, errors.New("sahifa tanilmadi, eski ro'yxat qoldi")
+	}
+	return list, nil
 }
 
 var (
@@ -385,9 +428,12 @@ var (
 )
 
 // parseUnsaved reads the table N | Sana | Para | Fan | Dars turi | Guruh | Xona | Davomat.
-// An empty list has no table at all, which simply means nothing is missing.
-func parseUnsaved(doc *html.Node) []Lesson {
+// An empty list has no table at all, which simply means nothing is missing. ok is false when the page
+// has rows that look like that table but none of them can be read: the page changed, and an empty
+// list would wrongly say that every lesson's attendance is saved.
+func parseUnsaved(doc *html.Node) (list []Lesson, ok bool) {
 	out := []Lesson{}
+	wide := 0 // rows with the table's eight cells
 	walk(doc, func(t *html.Node) {
 		if t.Type != html.ElementNode || t.Data != "table" {
 			return
@@ -405,6 +451,7 @@ func parseUnsaved(doc *html.Node) []Lesson {
 			if len(cells) < 8 {
 				return
 			}
+			wide++
 			date, para := dateRe.FindString(text(cells[1])), paraRe.FindStringSubmatch(text(cells[2]))
 			if date == "" || para == nil {
 				return
@@ -413,7 +460,29 @@ func parseUnsaved(doc *html.Node) []Lesson {
 				Type: text(cells[4]), Group: text(cells[5]), Room: text(cells[6]), URL: attendanceLink(cells[7])})
 		})
 	})
-	return out
+	// The page is recognised only by what the site really puts on it (seen 2026-11-12): the title
+	// "Davomati saqlanmagan darslar", and a badge "Jami: N" with the number of rows. A page without that
+	// title is some other page (an error, a changed layout) and says nothing about what is saved.
+	if !strings.Contains(strings.ToLower(pageTitle(doc)), "saqlanmagan") {
+		return out, false
+	}
+	if m := jamiRe.FindStringSubmatch(classText(doc, "jami-badge")); m != nil {
+		n, _ := strconv.Atoi(m[1])
+		return out, n == len(out) // the site's own count must match the rows that could be read
+	}
+	return out, len(out) > 0 || wide == 0 // no badge: an empty list is a page without a table
+}
+
+var jamiRe = regexp.MustCompile(`Jami:\s*(\d+)`)
+
+func pageTitle(doc *html.Node) string {
+	var title string
+	walk(doc, func(n *html.Node) {
+		if title == "" && n.Type == html.ElementNode && n.Data == "title" {
+			title = text(n)
+		}
+	})
+	return title
 }
 
 // semesterStart is a safe lower bound for the first lesson of the semester containing t.

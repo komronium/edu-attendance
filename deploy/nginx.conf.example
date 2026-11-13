@@ -1,0 +1,41 @@
+# Example nginx site for attendance. The live config (checked 2026-11-12) already has the two proxy_set_header
+# lines the app needs. What it lacks, and this adds: proxy_read_timeout, a limit on /login, HSTS.
+# Paths and the server name are the ones in README.md.
+
+limit_req_zone $binary_remote_addr zone=attendance_login:1m rate=10r/m;
+
+server {
+    listen 443 ssl http2;
+    server_name davomat.lidersement.uz;
+    # ssl_certificate / ssl_certificate_key: as issued (certbot)
+
+    add_header Strict-Transport-Security "max-age=31536000" always;
+
+    client_max_body_size 256k;            # the app refuses JSON bodies over 200 KB anyway
+
+    location = /login {
+        limit_req zone=attendance_login burst=5 nodelay;   # password guessing, per address
+        limit_req_status 429;
+        include /etc/nginx/attendance-proxy.conf;
+    }
+
+    location / {
+        include /etc/nginx/attendance-proxy.conf;
+    }
+}
+
+server {
+    listen 80;
+    server_name davomat.lidersement.uz;
+    return 301 https://$host$request_uri;
+}
+
+# /etc/nginx/attendance-proxy.conf
+#
+#   proxy_pass http://127.0.0.1:8766;
+#   proxy_http_version 1.1;
+#   proxy_set_header Host $host;
+#   proxy_set_header X-Real-IP $remote_addr;        # REQUIRED: must overwrite what the client sent;
+#                                                   # the login lockout counts failures per this address
+#   proxy_set_header X-Forwarded-Proto $scheme;     # REQUIRED: makes the session cookie Secure
+#   proxy_read_timeout 90s;                         # REQUIRED: a manual sync can take up to 70 s

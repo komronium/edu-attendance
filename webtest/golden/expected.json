@@ -1,0 +1,1925 @@
+[
+ {
+  "today": "2026-11-11",
+  "now": "15:00",
+  "load": {
+   "lines": [
+    {
+     "subject": "Algoritmlash",
+     "type": "Amaliy",
+     "group": "2-ATT-25",
+     "plan": 180,
+     "done": 14,
+     "noAtt": 0,
+     "course": true,
+     "left": 166,
+     "first": "2026-10-21",
+     "queued": 16
+    },
+    {
+     "subject": "Ma`lumotlar tuzilmasi va algoritmlar",
+     "type": "Ma'ruza",
+     "group": "K4-ATT-25",
+     "plan": 30,
+     "sitePlan": 30,
+     "done": 16,
+     "noAtt": 2,
+     "closed": false,
+     "queued": 2,
+     "left": 12,
+     "first": "2026-09-15",
+     "last": "2026-11-24",
+     "sirtqi": false,
+     "finished": false
+    },
+    {
+     "subject": "Ma`lumotlar tuzilmasi va algoritmlar",
+     "type": "Amaliy",
+     "group": "K4-ATT-25",
+     "plan": 30,
+     "sitePlan": 30,
+     "done": 16,
+     "noAtt": 0,
+     "closed": false,
+     "queued": 2,
+     "left": 14,
+     "first": "2026-09-18",
+     "last": "2026-11-20",
+     "sirtqi": false,
+     "finished": false
+    },
+    {
+     "subject": "Tibbiyotda axborot texnologiyalar",
+     "type": "Amaliy",
+     "group": "23-OHI-26",
+     "plan": 4,
+     "sitePlan": 16,
+     "done": 4,
+     "noAtt": 0,
+     "closed": true,
+     "queued": 0,
+     "left": 0,
+     "first": "2026-09-17",
+     "last": "2026-09-24",
+     "sirtqi": false,
+     "finished": false
+    },
+    {
+     "subject": "Tibbiyotda axborot texnologiyalar",
+     "type": "Amaliy",
+     "group": "14-OHI-26",
+     "plan": 30,
+     "sitePlan": 30,
+     "done": 14,
+     "noAtt": 0,
+     "closed": false,
+     "queued": 3,
+     "left": 16,
+     "first": "2026-09-23",
+     "last": "2026-11-25",
+     "sirtqi": false,
+     "finished": false
+    },
+    {
+     "subject": "Bulutli texnologiyalar",
+     "type": "Ma'ruza",
+     "group": "S1-KT-22, S3-KT-22",
+     "plan": 16,
+     "sitePlan": 16,
+     "done": 4,
+     "noAtt": 2,
+     "closed": false,
+     "queued": 3,
+     "left": 10,
+     "first": "2026-11-02",
+     "last": "2026-11-19",
+     "sirtqi": true,
+     "finished": false,
+     "window": {
+      "first": "2026-11-02",
+      "last": "2026-11-22"
+     },
+     "frac": 0.5
+    },
+    {
+     "subject": "Bulutli texnologiyalar",
+     "type": "Amaliy",
+     "group": "S3-KT-22",
+     "plan": 8,
+     "sitePlan": 8,
+     "done": 2,
+     "noAtt": 0,
+     "closed": false,
+     "queued": 2,
+     "left": 6,
+     "first": "2026-11-04",
+     "last": "2026-11-18",
+     "sirtqi": true,
+     "finished": false,
+     "window": {
+      "first": "2026-11-02",
+      "last": "2026-11-22"
+     },
+     "frac": 0.5
+    },
+    {
+     "subject": "Bulutli texnologiyalar",
+     "type": "Amaliy",
+     "group": "S1-KT-22",
+     "plan": 8,
+     "sitePlan": 8,
+     "done": 2,
+     "noAtt": 0,
+     "closed": false,
+     "queued": 2,
+     "left": 6,
+     "first": "2026-11-07",
+     "last": "2026-11-21",
+     "sirtqi": true,
+     "finished": false,
+     "window": {
+      "first": "2026-11-02",
+      "last": "2026-11-22"
+     },
+     "frac": 0.5
+    }
+   ],
+   "independent": {
+    "Ma`lumotlar tuzilmasi va algoritmlar": 60
+   },
+   "course": {
+    "subject": "Algoritmlash",
+    "type": "Amaliy",
+    "group": "2-ATT-25",
+    "plan": 180,
+    "done": 14,
+    "noAtt": 0,
+    "course": true,
+    "left": 166,
+    "first": "2026-10-21",
+    "queued": 16
+   },
+   "coursePlanHours": 180,
+   "frac": 0.5666666666666667,
+   "day": 51,
+   "days": 90,
+   "daysLeft": 39,
+   "week": 9,
+   "weeks": 15,
+   "end": "2026-12-26",
+   "all": {
+    "plan": 306,
+    "held": 76,
+    "left": 230,
+    "pct": 24.836601307189543,
+    "expected": 173,
+    "diff": -97,
+    "ofExpected": 43.93063583815029
+   },
+   "types": [
+    {
+     "type": "Ma'ruza",
+     "sum": {
+      "plan": 46,
+      "held": 24,
+      "left": 22,
+      "pct": 52.17391304347826,
+      "expected": 25,
+      "diff": -1,
+      "ofExpected": 96
+     },
+     "est": false
+    },
+    {
+     "type": "Amaliy",
+     "sum": {
+      "plan": 260,
+      "held": 52,
+      "left": 208,
+      "pct": 20,
+      "expected": 148,
+      "diff": -96,
+      "ofExpected": 35.13513513513514
+     },
+     "est": true
+    }
+   ],
+   "weekly": {
+    "current": 8.941176470588236,
+    "required": 35.38461538461539,
+    "projected": 134.11764705882354
+   },
+   "est": "~"
+  },
+  "entries": [
+   {
+    "kind": "site",
+    "date": "2026-09-15",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-09-17",
+    "para": 7,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-09-18",
+    "para": 5,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-09-22",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-09-23",
+    "para": 7,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-09-24",
+    "para": 7,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-09-25",
+    "para": 5,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-09-29",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-09-30",
+    "para": 7,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-02",
+    "para": 5,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-06",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-07",
+    "para": 7,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-09",
+    "para": 5,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-13",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-14",
+    "para": 7,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-16",
+    "para": 5,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-20",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-10-21",
+    "para": 3,
+    "session": 1
+   },
+   {
+    "kind": "course",
+    "date": "2026-10-21",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-21",
+    "para": 7,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-10-22",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-10-22",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-23",
+    "para": 5,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-10-24",
+    "para": 3,
+    "session": 2
+   },
+   {
+    "kind": "course",
+    "date": "2026-10-26",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-10-26",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-10-27",
+    "para": 3,
+    "session": 3
+   },
+   {
+    "kind": "course",
+    "date": "2026-10-27",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-27",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-10-28",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-10-28",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-28",
+    "para": 7,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-10-29",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-10-29",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-10-30",
+    "para": 3,
+    "session": 4
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-30",
+    "para": 5,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-02",
+    "para": 3,
+    "session": 5
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-02",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-02",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-03",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-03",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-03",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-04",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-04",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-04",
+    "para": 7,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-04",
+    "para": 5,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-05",
+    "para": 3,
+    "session": 6
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-05",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-05",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-06",
+    "para": 5,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-07",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-08",
+    "para": 3,
+    "session": 7
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-09",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-09",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-09",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-10",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-10",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-10",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-11",
+    "para": 3,
+    "session": 8
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-11",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-11",
+    "para": 7,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-11",
+    "para": 5,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-12",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-12",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-12",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-13",
+    "para": 5,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-14",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-16",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-16",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-16",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-17",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-17",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-17",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-18",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-18",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-18",
+    "para": 7,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-18",
+    "para": 5,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-19",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-19",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-19",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-20",
+    "para": 5,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-21",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-23",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-23",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-24",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-24",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-24",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-25",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-25",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-25",
+    "para": 7,
+    "session": null
+   }
+  ],
+  "gaps": [
+   "2026-11-11|4",
+   "2026-11-11|3",
+   "2026-11-10|4",
+   "2026-11-10|3",
+   "2026-11-09|4",
+   "2026-11-09|3",
+   "2026-11-05|4",
+   "2026-11-04|4",
+   "2026-11-04|3",
+   "2026-11-03|4",
+   "2026-11-03|3",
+   "2026-11-02|4",
+   "2026-10-29|4",
+   "2026-10-29|3",
+   "2026-10-28|4",
+   "2026-10-28|3",
+   "2026-10-27|4",
+   "2026-10-26|4",
+   "2026-10-26|3",
+   "2026-10-22|4",
+   "2026-10-22|3",
+   "2026-10-21|4"
+  ],
+  "next": "2026-11-11|5|site",
+  "ustamaOpen": {
+   "count": 3,
+   "points": 20,
+   "days": 19
+  },
+  "ustamaFigure": {
+   "onSite": true,
+   "known": true,
+   "approved": 0,
+   "pending": 5,
+   "value": 0
+  }
+ },
+ {
+  "today": "2026-10-02",
+  "now": "09:00",
+  "load": {
+   "lines": [
+    {
+     "subject": "Algoritmlash",
+     "type": "Amaliy",
+     "group": "2-ATT-25",
+     "plan": 180,
+     "done": 14,
+     "noAtt": 0,
+     "course": true,
+     "left": 166,
+     "first": "2026-10-21",
+     "queued": 38
+    },
+    {
+     "subject": "Ma`lumotlar tuzilmasi va algoritmlar",
+     "type": "Ma'ruza",
+     "group": "K4-ATT-25",
+     "plan": 30,
+     "sitePlan": 30,
+     "done": 6,
+     "noAtt": 0,
+     "closed": false,
+     "queued": 8,
+     "left": 24,
+     "first": "2026-09-15",
+     "last": "2026-11-24",
+     "sirtqi": false,
+     "finished": false
+    },
+    {
+     "subject": "Ma`lumotlar tuzilmasi va algoritmlar",
+     "type": "Amaliy",
+     "group": "K4-ATT-25",
+     "plan": 30,
+     "sitePlan": 30,
+     "done": 4,
+     "noAtt": 0,
+     "closed": false,
+     "queued": 8,
+     "left": 26,
+     "first": "2026-09-18",
+     "last": "2026-11-20",
+     "sirtqi": false,
+     "finished": false
+    },
+    {
+     "subject": "Tibbiyotda axborot texnologiyalar",
+     "type": "Amaliy",
+     "group": "23-OHI-26",
+     "plan": 4,
+     "sitePlan": 16,
+     "done": 4,
+     "noAtt": 0,
+     "closed": true,
+     "queued": 0,
+     "left": 0,
+     "first": "2026-09-17",
+     "last": "2026-09-24",
+     "sirtqi": false,
+     "finished": false
+    },
+    {
+     "subject": "Tibbiyotda axborot texnologiyalar",
+     "type": "Amaliy",
+     "group": "14-OHI-26",
+     "plan": 30,
+     "sitePlan": 30,
+     "done": 4,
+     "noAtt": 0,
+     "closed": false,
+     "queued": 8,
+     "left": 26,
+     "first": "2026-09-23",
+     "last": "2026-11-25",
+     "sirtqi": false,
+     "finished": false
+    },
+    {
+     "subject": "Bulutli texnologiyalar",
+     "type": "Ma'ruza",
+     "group": "S1-KT-22, S3-KT-22",
+     "plan": 16,
+     "sitePlan": 16,
+     "done": 0,
+     "noAtt": 0,
+     "closed": false,
+     "queued": 6,
+     "left": 16,
+     "first": "2026-11-02",
+     "last": "2026-11-19",
+     "sirtqi": true,
+     "finished": false,
+     "window": {
+      "first": "2026-11-02",
+      "last": "2026-11-22"
+     },
+     "frac": 0
+    },
+    {
+     "subject": "Bulutli texnologiyalar",
+     "type": "Amaliy",
+     "group": "S3-KT-22",
+     "plan": 8,
+     "sitePlan": 8,
+     "done": 0,
+     "noAtt": 0,
+     "closed": false,
+     "queued": 3,
+     "left": 8,
+     "first": "2026-11-04",
+     "last": "2026-11-18",
+     "sirtqi": true,
+     "finished": false,
+     "window": {
+      "first": "2026-11-02",
+      "last": "2026-11-22"
+     },
+     "frac": 0
+    },
+    {
+     "subject": "Bulutli texnologiyalar",
+     "type": "Amaliy",
+     "group": "S1-KT-22",
+     "plan": 8,
+     "sitePlan": 8,
+     "done": 0,
+     "noAtt": 0,
+     "closed": false,
+     "queued": 3,
+     "left": 8,
+     "first": "2026-11-07",
+     "last": "2026-11-21",
+     "sirtqi": true,
+     "finished": false,
+     "window": {
+      "first": "2026-11-02",
+      "last": "2026-11-22"
+     },
+     "frac": 0
+    }
+   ],
+   "independent": {
+    "Ma`lumotlar tuzilmasi va algoritmlar": 60
+   },
+   "course": {
+    "subject": "Algoritmlash",
+    "type": "Amaliy",
+    "group": "2-ATT-25",
+    "plan": 180,
+    "done": 14,
+    "noAtt": 0,
+    "course": true,
+    "left": 166,
+    "first": "2026-10-21",
+    "queued": 38
+   },
+   "coursePlanHours": 180,
+   "frac": 0.18888888888888888,
+   "day": 17,
+   "days": 90,
+   "daysLeft": 73,
+   "week": 3,
+   "weeks": 15,
+   "end": "2026-12-26",
+   "all": {
+    "plan": 306,
+    "held": 32,
+    "left": 274,
+    "pct": 10.457516339869281,
+    "expected": 54.99999999999999,
+    "diff": -22.999999999999993,
+    "ofExpected": 58.18181818181819
+   },
+   "types": [
+    {
+     "type": "Ma'ruza",
+     "sum": {
+      "plan": 46,
+      "held": 6,
+      "left": 40,
+      "pct": 13.043478260869565,
+      "expected": 5.666666666666666,
+      "diff": 0.3333333333333339,
+      "ofExpected": 105.88235294117648
+     },
+     "est": false
+    },
+    {
+     "type": "Amaliy",
+     "sum": {
+      "plan": 260,
+      "held": 26,
+      "left": 234,
+      "pct": 10,
+      "expected": 49.33333333333333,
+      "diff": -23.33333333333333,
+      "ofExpected": 52.70270270270271
+     },
+     "est": true
+    }
+   ],
+   "weekly": {
+    "current": 11.294117647058822,
+    "required": 22.52054794520548,
+    "projected": 169.41176470588235
+   },
+   "est": "~"
+  },
+  "entries": [
+   {
+    "kind": "site",
+    "date": "2026-09-15",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-09-17",
+    "para": 7,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-09-18",
+    "para": 5,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-09-22",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-09-23",
+    "para": 7,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-09-24",
+    "para": 7,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-09-25",
+    "para": 5,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-09-29",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-09-30",
+    "para": 7,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-02",
+    "para": 5,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-06",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-07",
+    "para": 7,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-09",
+    "para": 5,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-13",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-14",
+    "para": 7,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-16",
+    "para": 5,
+    "session": null
+   }
+  ],
+  "gaps": [],
+  "next": "2026-10-02|5|site",
+  "ustamaOpen": {
+   "count": 1,
+   "points": 5,
+   "days": 29
+  },
+  "ustamaFigure": {
+   "onSite": true,
+   "known": true,
+   "approved": 35,
+   "pending": 0,
+   "value": 35
+  }
+ },
+ {
+  "today": "2026-11-14",
+  "now": "23:30",
+  "load": {
+   "lines": [
+    {
+     "subject": "Algoritmlash",
+     "type": "Amaliy",
+     "group": "2-ATT-25",
+     "plan": 180,
+     "done": 14,
+     "noAtt": 0,
+     "course": true,
+     "left": 166,
+     "first": "2026-10-21",
+     "queued": 16
+    },
+    {
+     "subject": "Ma`lumotlar tuzilmasi va algoritmlar",
+     "type": "Ma'ruza",
+     "group": "K4-ATT-25",
+     "plan": 30,
+     "sitePlan": 30,
+     "done": 16,
+     "noAtt": 2,
+     "closed": false,
+     "queued": 2,
+     "left": 12,
+     "first": "2026-09-15",
+     "last": "2026-11-24",
+     "sirtqi": false,
+     "finished": false
+    },
+    {
+     "subject": "Ma`lumotlar tuzilmasi va algoritmlar",
+     "type": "Amaliy",
+     "group": "K4-ATT-25",
+     "plan": 30,
+     "sitePlan": 30,
+     "done": 18,
+     "noAtt": 0,
+     "closed": false,
+     "queued": 1,
+     "left": 12,
+     "first": "2026-09-18",
+     "last": "2026-11-20",
+     "sirtqi": false,
+     "finished": false
+    },
+    {
+     "subject": "Tibbiyotda axborot texnologiyalar",
+     "type": "Amaliy",
+     "group": "23-OHI-26",
+     "plan": 4,
+     "sitePlan": 16,
+     "done": 4,
+     "noAtt": 0,
+     "closed": true,
+     "queued": 0,
+     "left": 0,
+     "first": "2026-09-17",
+     "last": "2026-09-24",
+     "sirtqi": false,
+     "finished": false
+    },
+    {
+     "subject": "Tibbiyotda axborot texnologiyalar",
+     "type": "Amaliy",
+     "group": "14-OHI-26",
+     "plan": 30,
+     "sitePlan": 30,
+     "done": 16,
+     "noAtt": 0,
+     "closed": false,
+     "queued": 2,
+     "left": 14,
+     "first": "2026-09-23",
+     "last": "2026-11-25",
+     "sirtqi": false,
+     "finished": false
+    },
+    {
+     "subject": "Bulutli texnologiyalar",
+     "type": "Ma'ruza",
+     "group": "S1-KT-22, S3-KT-22",
+     "plan": 16,
+     "sitePlan": 16,
+     "done": 6,
+     "noAtt": 2,
+     "closed": false,
+     "queued": 2,
+     "left": 8,
+     "first": "2026-11-02",
+     "last": "2026-11-19",
+     "sirtqi": true,
+     "finished": false,
+     "window": {
+      "first": "2026-11-02",
+      "last": "2026-11-22"
+     },
+     "frac": 0.6666666666666666
+    },
+    {
+     "subject": "Bulutli texnologiyalar",
+     "type": "Amaliy",
+     "group": "S3-KT-22",
+     "plan": 8,
+     "sitePlan": 8,
+     "done": 4,
+     "noAtt": 0,
+     "closed": false,
+     "queued": 1,
+     "left": 4,
+     "first": "2026-11-04",
+     "last": "2026-11-18",
+     "sirtqi": true,
+     "finished": false,
+     "window": {
+      "first": "2026-11-02",
+      "last": "2026-11-22"
+     },
+     "frac": 0.6666666666666666
+    },
+    {
+     "subject": "Bulutli texnologiyalar",
+     "type": "Amaliy",
+     "group": "S1-KT-22",
+     "plan": 8,
+     "sitePlan": 8,
+     "done": 4,
+     "noAtt": 0,
+     "closed": false,
+     "queued": 1,
+     "left": 4,
+     "first": "2026-11-07",
+     "last": "2026-11-21",
+     "sirtqi": true,
+     "finished": false,
+     "window": {
+      "first": "2026-11-02",
+      "last": "2026-11-22"
+     },
+     "frac": 0.6666666666666666
+    }
+   ],
+   "independent": {
+    "Ma`lumotlar tuzilmasi va algoritmlar": 60
+   },
+   "course": {
+    "subject": "Algoritmlash",
+    "type": "Amaliy",
+    "group": "2-ATT-25",
+    "plan": 180,
+    "done": 14,
+    "noAtt": 0,
+    "course": true,
+    "left": 166,
+    "first": "2026-10-21",
+    "queued": 16
+   },
+   "coursePlanHours": 180,
+   "frac": 0.6,
+   "day": 54,
+   "days": 90,
+   "daysLeft": 36,
+   "week": 9,
+   "weeks": 15,
+   "end": "2026-12-26",
+   "all": {
+    "plan": 306,
+    "held": 86,
+    "left": 220,
+    "pct": 28.104575163398692,
+    "expected": 187.33333333333334,
+    "diff": -101.33333333333334,
+    "ofExpected": 45.90747330960854
+   },
+   "types": [
+    {
+     "type": "Ma'ruza",
+     "sum": {
+      "plan": 46,
+      "held": 26,
+      "left": 20,
+      "pct": 56.52173913043478,
+      "expected": 28.666666666666664,
+      "diff": -2.6666666666666643,
+      "ofExpected": 90.69767441860466
+     },
+     "est": false
+    },
+    {
+     "type": "Amaliy",
+     "sum": {
+      "plan": 260,
+      "held": 60,
+      "left": 200,
+      "pct": 23.076923076923077,
+      "expected": 158.66666666666669,
+      "diff": -98.66666666666669,
+      "ofExpected": 37.81512605042016
+     },
+     "est": true
+    }
+   ],
+   "weekly": {
+    "current": 9.555555555555555,
+    "required": 36.666666666666664,
+    "projected": 143.33333333333331
+   },
+   "est": "~"
+  },
+  "entries": [
+   {
+    "kind": "site",
+    "date": "2026-09-15",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-09-17",
+    "para": 7,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-09-18",
+    "para": 5,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-09-22",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-09-23",
+    "para": 7,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-09-24",
+    "para": 7,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-09-25",
+    "para": 5,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-09-29",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-09-30",
+    "para": 7,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-02",
+    "para": 5,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-06",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-07",
+    "para": 7,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-09",
+    "para": 5,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-13",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-14",
+    "para": 7,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-16",
+    "para": 5,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-20",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-10-21",
+    "para": 3,
+    "session": 1
+   },
+   {
+    "kind": "course",
+    "date": "2026-10-21",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-21",
+    "para": 7,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-10-22",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-10-22",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-23",
+    "para": 5,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-10-24",
+    "para": 3,
+    "session": 2
+   },
+   {
+    "kind": "course",
+    "date": "2026-10-26",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-10-26",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-10-27",
+    "para": 3,
+    "session": 3
+   },
+   {
+    "kind": "course",
+    "date": "2026-10-27",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-27",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-10-28",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-10-28",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-28",
+    "para": 7,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-10-29",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-10-29",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-10-30",
+    "para": 3,
+    "session": 4
+   },
+   {
+    "kind": "site",
+    "date": "2026-10-30",
+    "para": 5,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-02",
+    "para": 3,
+    "session": 5
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-02",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-02",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-03",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-03",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-03",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-04",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-04",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-04",
+    "para": 7,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-04",
+    "para": 5,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-05",
+    "para": 3,
+    "session": 6
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-05",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-05",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-06",
+    "para": 5,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-07",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-08",
+    "para": 3,
+    "session": 7
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-09",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-09",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-09",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-10",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-10",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-10",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-11",
+    "para": 3,
+    "session": 8
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-11",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-11",
+    "para": 7,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-11",
+    "para": 5,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-12",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-12",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-12",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-13",
+    "para": 5,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-14",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-16",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-16",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-16",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-17",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-17",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-17",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-18",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-18",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-18",
+    "para": 7,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-18",
+    "para": 5,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-19",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-19",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-19",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-20",
+    "para": 5,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-21",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-23",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-23",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-24",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-24",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-24",
+    "para": 6,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-25",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-25",
+    "para": 4,
+    "session": null
+   },
+   {
+    "kind": "site",
+    "date": "2026-11-25",
+    "para": 7,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-26",
+    "para": 3,
+    "session": null
+   },
+   {
+    "kind": "course",
+    "date": "2026-11-26",
+    "para": 4,
+    "session": null
+   }
+  ],
+  "gaps": [
+   "2026-11-12|4",
+   "2026-11-12|3",
+   "2026-11-11|4",
+   "2026-11-11|3",
+   "2026-11-10|4",
+   "2026-11-10|3",
+   "2026-11-09|4",
+   "2026-11-09|3",
+   "2026-11-05|4",
+   "2026-11-04|4",
+   "2026-11-04|3",
+   "2026-11-03|4",
+   "2026-11-03|3",
+   "2026-11-02|4",
+   "2026-10-29|4",
+   "2026-10-29|3",
+   "2026-10-28|4",
+   "2026-10-28|3",
+   "2026-10-27|4",
+   "2026-10-26|4",
+   "2026-10-26|3",
+   "2026-10-22|4",
+   "2026-10-22|3",
+   "2026-10-21|4"
+  ],
+  "next": "2026-11-16|3|course",
+  "ustamaOpen": {
+   "count": 3,
+   "points": 20,
+   "days": 16
+  },
+  "ustamaFigure": {
+   "onSite": true,
+   "known": true,
+   "approved": 0,
+   "pending": 5,
+   "value": 0
+  }
+ }
+]

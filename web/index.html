@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>attendance</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b0b0c" media="(prefers-color-scheme: dark)">
 <script src="/theme.js"></script>
 <link rel="preload" href="/fonts/public-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/app.css">
@@ -100,11 +103,28 @@
   <ul id="palette-list" class="plain"></ul>
   <p class="palette-hint">↑ ↓ tanlash · Enter ochish · Esc yopish</p>
 </dialog>
+<dialog id="relogin" aria-labelledby="relogin-title">
+  <form class="stack">
+    <h2 id="relogin-title">Sessiya tugadi</h2>
+    <p class="sub">Parolni kiriting: sahifa va yozganlaringiz joyida qoladi.</p>
+    <input name="password" type="password" autocomplete="current-password" required aria-label="Parol">
+    <p class="login-error" role="alert"></p>
+    <div class="dialog-actions"><a class="button quiet push-left" href="/login">Kirish sahifasi</a><button type="submit" class="primary">Kirish</button></div>
+  </form>
+</dialog>
 <dialog id="sheet" aria-labelledby="sheet-title">
   <h2 id="sheet-title"></h2>
   <div id="sheet-body"></div>
+  <p id="sheet-error" class="form-error" role="alert" hidden></p>
 </dialog>
 <script src="/pace.js"></script>
+<script src="/lib/dates.js"></script>
+<script src="/lib/rules.js"></script>
+<script src="/lib/timetable.js"></script>
+<script src="/lib/load.js"></script>
+<script src="/lib/ustama.js"></script>
+<script src="/lib/plans.js"></script>
+<script src="/lib/format.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

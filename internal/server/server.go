@@ -32,7 +32,7 @@ const csp = "default-src 'none'; script-src 'self'; style-src 'self'; font-src '
 
 const loginPage = `<!doctype html>
 <html lang="uz"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>attendance</title><script src="/theme.js"></script><link rel="stylesheet" href="/app.css"></head>
+<title>attendance</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><script src="/theme.js"></script><link rel="stylesheet" href="/app.css"></head>
 <body class="login"><form method="post" action="/login" class="login-box">
 <div class="login-brand"><span class="logo" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><h1>attendance</h1></div>
 <label for="password">Parol</label>
@@ -58,6 +58,8 @@ type Config struct {
 	OxuSync func(ctx context.Context, cookie, owner string, prev *oxu.Data) (*oxu.Data, []string, error)
 	// CookieFile keeps the digital.oxu.uz session between restarts; empty keeps it in memory.
 	CookieFile string
+	// BackupDir is where database copies are written; empty means none are reported.
+	BackupDir string
 }
 
 type asset struct {
@@ -157,6 +159,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			s.login(w, r)
 			return
 		}
+		if r.URL.Path == "/api/login" {
+			s.apiLogin(w, r)
+			return
+		}
 		s.mutate(w, r)
 	case http.MethodPatch, http.MethodPut, http.MethodDelete:
 		s.mutate(w, r)
@@ -174,15 +180,36 @@ func (s *Server) authed(r *http.Request) bool {
 	return s.cfg.Auth.ValidSession(c.Value)
 }
 
+// renew gives a session in use a fresh cookie once it is past half its life.
+func (s *Server) renew(w http.ResponseWriter, r *http.Request) {
+	if c, err := r.Cookie(cookieName); err == nil {
+		if fresh, ok := s.cfg.Auth.Renew(c.Value); ok {
+			s.setCookie(w, r, fresh, auth.SessionSeconds)
+		}
+	}
+}
+
 func (s *Server) setCookie(w http.ResponseWriter, r *http.Request, value string, maxAge int) {
 	http.SetCookie(w, &http.Cookie{
 		Name: cookieName, Value: value, Path: "/", MaxAge: maxAge, HttpOnly: true, SameSite: http.SameSiteStrictMode,
-		Secure: s.cfg.SecureCookie || r.Header.Get("X-Forwarded-Proto") == "https",
+		Secure: s.cfg.SecureCookie || (fromProxy(r) && r.Header.Get("X-Forwarded-Proto") == "https"),
 	})
 }
 
+// fromProxy reports whether the request came through the local reverse proxy (nginx on the same
+// host, as deployed): only then do its X-Real-IP and X-Forwarded-Proto headers mean anything. From any
+// other peer they are whatever the client chose to send.
+func fromProxy(r *http.Request) bool {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return false
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
 func clientIP(r *http.Request) string {
-	if ip := r.Header.Get("X-Real-IP"); ip != "" {
+	if ip := r.Header.Get("X-Real-IP"); ip != "" && fromProxy(r) {
 		return ip
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
@@ -193,16 +220,26 @@ func clientIP(r *http.Request) string {
 }
 
 func isPublic(p string) bool {
-	return strings.HasPrefix(p, "/fonts/") || strings.HasPrefix(p, "/app.css") || p == "/theme.js"
+	return strings.HasPrefix(p, "/fonts/") || strings.HasPrefix(p, "/app.css") || p == "/theme.js" || p == "/public.js" || p == "/favicon.svg"
 }
 
 func (s *Server) get(w http.ResponseWriter, r *http.Request) {
 	p := r.URL.Path
 	switch {
-	case p == "/healthz":
-		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	case p == "/healthz": // for a monitor: the process is up and the database answers
+		if err := s.cfg.Store.Ping(); err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"ok": false, "db": false})
+			return
+		}
+		out := map[string]any{"ok": true, "db": true}
+		if _, at := s.sync.Snapshot(); at > 0 {
+			out["snapshot_age_s"] = int(time.Since(time.Unix(int64(at), 0)).Seconds())
+		}
+		writeJSON(w, http.StatusOK, out)
 	case p == "/login":
 		writeLogin(w, http.StatusOK, "")
+	case p == "/favicon.ico": // browsers ask for it on pages that name no icon
+		s.static(w, r, "/favicon.svg")
 	case p == "/logout":
 		s.setCookie(w, r, "", -1)
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
@@ -212,11 +249,12 @@ func (s *Server) get(w http.ResponseWriter, r *http.Request) {
 		s.publicRetakes(w, r, strings.TrimPrefix(p, "/q/"))
 	case !s.authed(r):
 		if strings.HasPrefix(p, "/api/") {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "kirish kerak"})
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "kirish kerak", "code": "unauthorized"})
 		} else {
 			http.Redirect(w, r, "/login", http.StatusSeeOther)
 		}
 	case strings.HasPrefix(p, "/api/"):
+		s.renew(w, r)
 		s.api.ServeHTTP(w, r)
 	case p == "/":
 		s.static(w, r, "/index.html")
@@ -227,32 +265,72 @@ func (s *Server) get(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) mutate(w http.ResponseWriter, r *http.Request) {
 	if !s.authed(r) {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "kirish kerak"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "kirish kerak", "code": "unauthorized"})
 		return
 	}
 	if r.Header.Get("X-Requested-With") != "attendance" { // a cross-site form cannot set this header
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "ruxsat yo'q"})
 		return
 	}
+	s.renew(w, r)
 	s.api.ServeHTTP(w, r)
 }
 
-func (s *Server) login(w http.ResponseWriter, r *http.Request) {
-	ip := clientIP(r)
-	if s.cfg.Auth.Locked(ip) {
-		writeLogin(w, http.StatusTooManyRequests, "juda ko'p urinish, bir necha daqiqadan keyin qayta urining")
+// apiLogin is the page's own login, for a session that ended while a page was open: the page stays,
+// and what was being typed is kept. Same checks as the login form.
+func (s *Server) apiLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("X-Requested-With") != "attendance" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "ruxsat yo'q"})
 		return
 	}
+	b, err := body(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "noto'g'ri so'rov"})
+		return
+	}
+	password, _ := b["password"].(string)
+	if status, msg := s.checkLogin(w, r, password); status != http.StatusOK {
+		writeJSON(w, status, map[string]string{"error": msg})
+		return
+	}
+	writeJSON(w, http.StatusOK, okBody)
+}
+
+const tooMany = "juda ko'p urinish, bir necha daqiqadan keyin qayta urining"
+
+// checkLogin checks a password with the lockout and the cap on parallel checks; on success the session
+// cookie is set. status is 200 on success, else 401 or 429 with a message for the person.
+func (s *Server) checkLogin(w http.ResponseWriter, r *http.Request, password string) (int, string) {
+	ip := clientIP(r)
+	release, ok := s.cfg.Auth.TryHash()
+	if !ok {
+		w.Header().Set("Retry-After", "1")
+		return http.StatusTooManyRequests, tooMany
+	}
+	defer release()
+	if !s.cfg.Auth.Attempt(ip) { // counted before the check: parallel guesses cannot pass the limit
+		slog.Warn("login locked", "ip", ip)
+		return http.StatusTooManyRequests, tooMany
+	}
+	if !s.cfg.Auth.CheckPassword(password) {
+		return http.StatusUnauthorized, "parol noto'g'ri"
+	}
+	s.cfg.Auth.Succeed(ip)
+	if err := s.cfg.Auth.Upgrade(password); err != nil {
+		slog.Error("auth upgrade", "err", err)
+	}
+	s.setCookie(w, r, s.cfg.Auth.NewSession(), auth.SessionSeconds)
+	return http.StatusOK, ""
+}
+
+func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	raw, _ := io.ReadAll(io.LimitReader(r.Body, maxFormBody))
 	form, _ := url.ParseQuery(string(raw))
-	if s.cfg.Auth.CheckPassword(form.Get("password")) {
-		s.cfg.Auth.Succeed(ip)
-		s.setCookie(w, r, s.cfg.Auth.NewSession(), auth.SessionSeconds)
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+	if status, msg := s.checkLogin(w, r, form.Get("password")); status != http.StatusOK {
+		writeLogin(w, status, msg)
 		return
 	}
-	s.cfg.Auth.Fail(ip)
-	writeLogin(w, http.StatusUnauthorized, "parol noto'g'ri")
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 func writeLogin(w http.ResponseWriter, status int, msg string) {
@@ -298,6 +376,35 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	enc.Encode(v)
 }
 
+// writeJSONFor is writeJSON, compressed when the body is large and the client accepts it: the synced
+// site data is tens of kilobytes of repetitive text.
+func writeJSONFor(w http.ResponseWriter, r *http.Request, status int, v any) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		slog.Error("api encode", "path", r.URL.Path, "err", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "ichki xato", "code": "internal"})
+		return
+	}
+	h := w.Header()
+	h.Set("Content-Type", "application/json; charset=utf-8")
+	h.Set("Cache-Control", "no-store")
+	h.Add("Vary", "Accept-Encoding")
+	out := buf.Bytes()
+	if len(out) >= 1024 && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+		var z bytes.Buffer
+		gz := gzip.NewWriter(&z)
+		if _, err := gz.Write(out); err == nil && gz.Close() == nil {
+			h.Set("Content-Encoding", "gzip")
+			out = z.Bytes()
+		}
+	}
+	h.Set("Content-Length", strconv.Itoa(len(out)))
+	w.WriteHeader(status)
+	w.Write(out)
+}
+
 type apiFunc func(r *http.Request) (status int, body any, err error)
 
 func (s *Server) handle(pattern string, f apiFunc) {
@@ -306,14 +413,22 @@ func (s *Server) handle(pattern string, f apiFunc) {
 		var verr *store.ValidationError
 		switch {
 		case err == nil:
-			writeJSON(w, status, body)
+			writeJSONFor(w, r, status, body)
 		case errors.As(err, &verr):
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": verr.Msg})
+			code := verr.Code
+			if code == "" {
+				code = "validation"
+			}
+			out := map[string]string{"error": verr.Msg, "code": code}
+			if verr.Field != "" {
+				out["field"] = verr.Field
+			}
+			writeJSON(w, http.StatusBadRequest, out)
 		case errors.Is(err, store.ErrNotFound):
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "topilmadi"})
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "topilmadi", "code": "not_found"})
 		default:
 			slog.Error("api", "method", r.Method, "path", r.URL.Path, "err", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "ichki xato"})
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "ichki xato", "code": "internal"})
 		}
 	})
 }
@@ -450,6 +565,32 @@ func (s *Server) routes() {
 		}
 		return 200, okBody, db.DeleteSession(n)
 	})
+	s.handle("POST /api/sessions/{id}/students", func(r *http.Request) (int, any, error) {
+		n, err := id(r, "id")
+		if err != nil {
+			return 0, nil, err
+		}
+		b, err := body(r)
+		if err != nil {
+			return 0, nil, err
+		}
+		st, ok := b["student_id"].(float64)
+		if !ok || st != float64(int64(st)) {
+			return 0, nil, &store.ValidationError{Msg: "talaba noto'g'ri"}
+		}
+		present := true
+		if v, ok := b["present"]; ok {
+			present = store.Truthy(v)
+		}
+		return 200, okBody, db.AddToSession(n, int64(st), present)
+	})
+	s.handle("POST /api/sessions/{id}/restore", func(r *http.Request) (int, any, error) {
+		n, err := id(r, "id")
+		if err != nil {
+			return 0, nil, err
+		}
+		return 200, okBody, db.RestoreSession(n)
+	})
 	s.handle("GET /api/free-para", func(r *http.Request) (int, any, error) {
 		para, err := db.FreePara(r.URL.Query().Get("date"))
 		return 200, map[string]*int{"para": para}, err
@@ -485,15 +626,14 @@ func (s *Server) routes() {
 		if err != nil {
 			return 0, nil, err
 		}
+		var present *bool
 		if _, ok := b["present"]; ok {
-			if err := db.SetPresent(v[0], v[1], store.Truthy(b["present"])); err != nil {
-				return 0, nil, err
-			}
+			p := store.Truthy(b["present"])
+			present = &p
 		}
-		if _, ok := b["grade"]; ok {
-			if err := db.SetGrade(v[0], v[1], b["grade"]); err != nil {
-				return 0, nil, err
-			}
+		_, hasGrade := b["grade"]
+		if err := db.UpdateMark(v[0], v[1], present, hasGrade, b["grade"]); err != nil {
+			return 0, nil, err
 		}
 		return 200, okBody, nil
 	})
@@ -522,7 +662,12 @@ func (s *Server) routes() {
 		if err != nil {
 			return 0, nil, err
 		}
-		return 200, okBody, db.SetKPIProgress(b["period"], b["item"], b["step"])
+		var done *bool
+		if v, ok := b["done"]; ok { // a stage and the item's tick change together
+			d := store.Truthy(v)
+			done = &d
+		}
+		return 200, okBody, db.SetKPIStep(b["period"], b["item"], b["step"], done)
 	})
 	s.handle("PUT /api/kpi-steps", func(r *http.Request) (int, any, error) {
 		b, err := body(r)
@@ -638,6 +783,28 @@ func (s *Server) routes() {
 		}
 		return 200, okBody, db.SetCoursePlanHours(b["hours"])
 	})
+	s.handle("GET /api/backup", func(r *http.Request) (int, any, error) {
+		if s.cfg.BackupDir == "" {
+			return 200, map[string]any{"last": nil}, nil
+		}
+		at, err := store.LastBackup(s.cfg.BackupDir)
+		if err != nil || at.IsZero() {
+			return 200, map[string]any{"last": nil}, err
+		}
+		return 200, map[string]any{"last": float64(at.Unix())}, nil
+	})
+	s.handle("POST /api/semester/new", func(r *http.Request) (int, any, error) {
+		b, err := body(r)
+		if err != nil {
+			return 0, nil, err
+		}
+		path, err := db.NewSemester(b["start"], b["weeks"], b["plan_hours"])
+		if err != nil {
+			return 0, nil, err
+		}
+		slog.Info("new semester", "start", b["start"], "backup", path)
+		return 200, map[string]any{"ok": true, "backup": path != ""}, nil
+	})
 	s.handle("GET /api/semester", func(r *http.Request) (int, any, error) {
 		v, err := db.Semester()
 		return 200, v, err
@@ -656,7 +823,7 @@ func (s *Server) routes() {
 		if data == nil {
 			return 200, map[string]any{"synced_at": nil, "data": nil}, nil
 		}
-		return 200, map[string]any{"synced_at": at, "data": json.RawMessage(data)}, nil
+		return 200, map[string]any{"synced_at": at, "data": json.RawMessage(withFetched(data, at))}, nil
 	})
 	s.handle("PUT /api/oxu/owner", func(r *http.Request) (int, any, error) {
 		b, err := body(r)
@@ -675,31 +842,28 @@ func (s *Server) routes() {
 		}
 		var warnings []string
 		cookie, _ := b["cookie"].(string)
-		fresh := strings.TrimSpace(cookie) != ""
-		start := time.Now()
-		if fresh {
-			warnings, err = s.sync.Replace(r.Context(), cookie)
+		ctx := context.WithValue(r.Context(), manualKey{}, true)
+		if strings.TrimSpace(cookie) != "" {
+			warnings, err = s.sync.Replace(ctx, cookie)
 		} else {
-			warnings, err = s.sync.Now(r.Context())
+			warnings, err = s.sync.Now(ctx)
 		}
-		slog.Info("oxu sync", "new_cookie", fresh, "ok", err == nil, "err", err, "took", time.Since(start).Round(time.Millisecond))
 		var wrong *oxu.WrongAccountError
 		switch {
 		case err == nil:
 			return 200, map[string]any{"ok": true, "warnings": warnings}, nil
 		case errors.Is(err, errNoOwner):
-			return 0, nil, &store.ValidationError{Msg: "Avval o'z ID raqamingizni kiriting"}
+			return 0, nil, &store.ValidationError{Msg: "Avval o'z ID raqamingizni kiriting", Code: "oxu_no_owner"}
 		case errors.As(err, &wrong):
-			return 0, nil, &store.ValidationError{Msg: "Bu sessiya boshqa hisobga tegishli (ID " + wrong.Code + "). Hech narsa saqlanmadi."}
+			return 0, nil, &store.ValidationError{Msg: "Bu sessiya boshqa hisobga tegishli (ID " + wrong.Code + "). Hech narsa saqlanmadi.", Code: "oxu_wrong_account"}
 		case errors.Is(err, errNoCookie):
-			return 0, nil, &store.ValidationError{Msg: "Avval cookie kiriting"}
+			return 0, nil, &store.ValidationError{Msg: "Avval cookie kiriting", Code: "oxu_no_cookie"}
 		case errors.Is(err, errBusy):
-			return 0, nil, &store.ValidationError{Msg: "Sinxronlash ketmoqda, biroz kuting"}
+			return 0, nil, &store.ValidationError{Msg: "Sinxronlash ketmoqda, biroz kuting", Code: "oxu_busy"}
 		case errors.Is(err, oxu.ErrSession):
-			return 0, nil, &store.ValidationError{Msg: "Sessiya tugagan yoki cookie noto'g'ri. digital.oxu.uz ga qayta kiring va yangi cookie kiriting."}
+			return 0, nil, &store.ValidationError{Msg: "Sessiya tugagan yoki cookie noto'g'ri. digital.oxu.uz ga qayta kiring va yangi cookie kiriting.", Code: "oxu_session"}
 		}
-		slog.Error("oxu sync", "err", err)
-		return 0, nil, &store.ValidationError{Msg: "digital.oxu.uz bilan bog'lanib bo'lmadi"}
+		return 0, nil, &store.ValidationError{Msg: "digital.oxu.uz bilan bog'lanib bo'lmadi", Code: "oxu_unreachable"}
 	})
 	s.handle("DELETE /api/oxu/cookie", func(r *http.Request) (int, any, error) {
 		return 200, okBody, s.sync.Forget()
@@ -736,53 +900,29 @@ func (s *Server) routes() {
 		}
 		return 200, okBody, db.SetRetake(v[0], v[1], store.Truthy(b["done"]), b["date"], b["time"], b["room"])
 	})
-	s.handle("GET /api/retake-sessions", func(r *http.Request) (int, any, error) {
-		rs, err := db.RetakeSessions()
-		return 200, map[string]any{"sessions": rs}, err
-	})
-	s.handle("POST /api/retake-sessions", func(r *http.Request) (int, any, error) {
-		b, err := body(r)
-		if err != nil {
-			return 0, nil, err
-		}
-		n, err := db.StartRetakeSession(b["date"], 0)
-		return 201, map[string]int64{"id": n}, err
-	})
-	s.handle("GET /api/retake-sessions/{id}", func(r *http.Request) (int, any, error) {
-		n, err := id(r, "id")
-		if err != nil {
-			return 0, nil, err
-		}
-		rs, err := db.RetakeSession(n)
-		return 200, rs, err
-	})
-	s.handle("DELETE /api/retake-sessions/{id}", func(r *http.Request) (int, any, error) {
-		n, err := id(r, "id")
-		if err != nil {
-			return 0, nil, err
-		}
-		return 200, okBody, db.DeleteRetakeSession(n)
-	})
-	s.handle("PUT /api/retake-sessions/{rid}/items/{sid}/{st}", func(r *http.Request) (int, any, error) {
-		v, err := ids(r, "rid", "sid", "st")
-		if err != nil {
-			return 0, nil, err
-		}
-		b, err := body(r)
-		if err != nil {
-			return 0, nil, err
-		}
-		return 200, okBody, db.AcceptRetake(v[0], v[1], v[2], store.Truthy(b["done"]))
-	})
-	s.handle("POST /api/retake-sessions/{id}/finish", func(r *http.Request) (int, any, error) {
-		n, err := id(r, "id")
-		if err != nil {
-			return 0, nil, err
-		}
-		b, err := body(r)
-		if err != nil {
-			return 0, nil, err
-		}
-		return 200, okBody, db.FinishRetakeSession(n, b["room"], 0)
-	})
+}
+
+// withFetched fills in when each section was read for a snapshot written before sections recorded it:
+// all of them at the sync's own time, which is what such a sync claimed.
+func withFetched(raw []byte, at float64) []byte {
+	var probe struct {
+		Fetched map[string]float64 `json:"fetched"`
+	}
+	if json.Unmarshal(raw, &probe) != nil || probe.Fetched != nil {
+		return raw
+	}
+	var all map[string]json.RawMessage
+	if json.Unmarshal(raw, &all) != nil {
+		return raw
+	}
+	fetched := map[string]float64{}
+	for _, k := range []string{"lessons", "unsaved", "load", "kpi", "periods", "months"} {
+		fetched[k] = at
+	}
+	all["fetched"], _ = json.Marshal(fetched)
+	out, err := json.Marshal(all)
+	if err != nil {
+		return raw
+	}
+	return out
 }

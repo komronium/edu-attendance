@@ -10,8 +10,10 @@ import (
 	"unicode/utf8"
 )
 
-// ValidationError is a user-facing problem with the input (HTTP 400).
-type ValidationError struct{ Msg string }
+// ValidationError is a user-facing problem with the input (HTTP 400). Code, when set, names the case
+// for the page ("oxu_session"); the page never has to match the Uzbek text. Field, when set, is the
+// name of the form control at fault.
+type ValidationError struct{ Msg, Code, Field string }
 
 func (e *ValidationError) Error() string { return e.Msg }
 
@@ -76,6 +78,9 @@ func cleanPara(v any) (int, error) {
 	var n int
 	switch t := v.(type) {
 	case float64:
+		if t != float64(int(t)) {
+			return 0, invalid(msg)
+		}
 		n = int(t)
 	case int:
 		n = t
@@ -87,10 +92,6 @@ func cleanPara(v any) (int, error) {
 			return 0, invalid(msg)
 		}
 		n = parsed
-	case bool:
-		if t {
-			n = 1
-		}
 	default:
 		return 0, invalid(msg)
 	}
@@ -105,7 +106,7 @@ var timeRe = regexp.MustCompile(`^([01]?\d|2[0-3]):[0-5]\d$`)
 func cleanTime(v any) (string, error) {
 	text := strings.TrimSpace(str(v))
 	if !timeRe.MatchString(text) {
-		return "", invalid("vaqt soat:daqiqa ko'rinishida bo'lsin, masalan 14:50")
+		return "", &ValidationError{Msg: "vaqt soat:daqiqa ko'rinishida bo'lsin, masalan 14:50", Field: "time"}
 	}
 	hh, mm, _ := strings.Cut(text, ":")
 	h, _ := strconv.Atoi(hh)

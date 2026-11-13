@@ -161,29 +161,6 @@ func TestDebtsAndRetakes(t *testing.T) {
 		t.Fatalf("%+v", r)
 	}
 
-	// retake sittings
-	check(s.SetPresent(sid, ali, false))
-	rid := must(s.StartRetakeSession("2026-10-10", 0))
-	if err := s.AcceptRetake(rid, sid, ali, true); err != nil {
-		t.Fatal(err)
-	}
-	d := must(s.RetakeSession(rid))
-	if d.Accepted != 1 || len(d.Items) != 1 {
-		t.Fatalf("%+v", d)
-	}
-	if err := s.AcceptRetake(999, sid, ali, true); !errors.Is(err, ErrNotFound) {
-		t.Fatal(err)
-	}
-	wantInvalid(t, s.FinishRetakeSession(rid, "", 0), "xona bo'sh bo'lmasligi kerak")
-	if err := s.FinishRetakeSession(rid, "K4", 0); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.DeleteRetakeSession(rid); err != nil {
-		t.Fatal(err)
-	}
-	if r = must(s.Retakes()); r.Owed != 1 {
-		t.Fatalf("deleting a sitting must make its retakes owed again: %+v", r)
-	}
 }
 
 func TestStudentStatsAndGrades(t *testing.T) {
@@ -407,21 +384,18 @@ func TestPresentAgainClearsTheWholeRetake(t *testing.T) {
 	check(s.SetPresent(sid, ali, false))
 	check(s.SetPresent(sid, vali, false))
 
-	// accepted in a sitting, then marked present: the sitting must forget the student
-	rid := must(s.StartRetakeSession("2026-10-10", 0))
-	check(s.AcceptRetake(rid, sid, ali, true))
-	if got := must(s.RetakeSessions()); got[0].Accepted != 1 {
-		t.Fatalf("%+v", got)
+	// accepted in a sitting (only `import` makes them now), then marked present: the sitting must forget it
+	if _, err := s.db.Exec("insert into retake_sessions (id, date, started_at) values (7, '2026-10-10', 0)"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec("update attendance set retake_at='2026-10-10', retake_session_id=7 where session_id=? and student_id=?", sid, ali); err != nil {
+		t.Fatal(err)
 	}
 	check(s.SetPresent(sid, ali, true))
-	if got := must(s.RetakeSessions()); got[0].Accepted != 0 {
-		t.Fatalf("a student marked present again must leave the sitting: %+v", got)
-	}
-	check(s.SetPresent(sid, ali, false))
-	for _, i := range must(s.RetakeSession(rid)).Items {
-		if i.RetakeSessionID != nil {
-			t.Fatalf("absent again means owed again, not accepted: %+v", i)
-		}
+	var left int
+	check(s.db.QueryRow("select count(*) from attendance where retake_session_id is not null").Scan(&left))
+	if left != 0 {
+		t.Fatal("a student marked present again must leave the sitting")
 	}
 
 	// a recorded time and room must not come back with the next absence
@@ -501,4 +475,24 @@ func TestSemester(t *testing.T) {
 	wantInvalid(t, s.SetSemester("14.09.2026", 15.0), "sana noto'g'ri")
 	wantInvalid(t, s.SetSemester("2026-09-14", 2.0), "haftalar 4 va 30 orasida bo'lsin")
 	wantInvalid(t, s.SetSemester("2026-09-14", "abc"), "haftalar 4 va 30 orasida bo'lsin")
+}
+
+func TestOldReadNoticesArePrunedUnreadOnesStay(t *testing.T) {
+	s := open(t)
+	check(s.AddNotification("lesson_added", "eski o'qilgan", "", ""))
+	check(s.AddNotification("lesson_added", "eski o'qilmagan", "", ""))
+	check(s.AddNotification("lesson_added", "yangi o'qilgan", "", ""))
+	old := now() - 100*86400
+	must(s.db.Exec("update notifications set created_at=?, read_at=? where title='eski o''qilgan'", old, old))
+	must(s.db.Exec("update notifications set created_at=? where title='eski o''qilmagan'", old))
+	must(s.db.Exec("update notifications set read_at=? where title='yangi o''qilgan'", now()))
+	check(s.PruneNotifications())
+	var titles []string
+	for _, n := range must(s.Notifications()) {
+		titles = append(titles, n.Title)
+	}
+	if len(titles) != 2 {
+		t.Fatalf("kept %v, want the unread old one and the recently read one", titles)
+	}
+	check(s.Ping())
 }

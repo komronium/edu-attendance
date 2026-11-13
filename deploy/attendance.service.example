@@ -1,0 +1,30 @@
+# The live unit (checked 2026-11-12), plus UMask. Install as /etc/systemd/system/attendance.service, then
+#   systemctl daemon-reload && systemctl restart attendance
+[Unit]
+Description=attendance
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=ATTENDANCE_DATA=/var/lib/davomat
+Environment=ATTENDANCE_BIND=127.0.0.1
+Environment=ATTENDANCE_PORT=8766
+# REQUIRED behind HTTPS: the session cookie is always Secure
+Environment=ATTENDANCE_SECURE_COOKIE=1
+ExecStart=/opt/attendance/attendance run
+Restart=always
+RestartSec=5
+
+# the data directory is /var/lib/private/davomat, owned by a dynamic user named davomat
+DynamicUser=yes
+User=davomat
+StateDirectory=davomat
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

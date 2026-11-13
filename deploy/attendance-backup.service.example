@@ -1,0 +1,20 @@
+# Daily copy of the database; runs while the service is up (it reads a consistent snapshot).
+# Copies go to /var/lib/davomat/backups, the newest 30 are kept. Copy them off the server too.
+#
+# DynamicUser=yes with the same User= and StateDirectory= as attendance.service gives this unit the same
+# user and the same data directory, which is why no other user or path is named here.
+[Unit]
+Description=attendance database backup
+
+[Service]
+Type=oneshot
+Environment=ATTENDANCE_DATA=/var/lib/davomat
+ExecStart=/opt/attendance/attendance backup --keep 30
+DynamicUser=yes
+User=davomat
+StateDirectory=davomat
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes

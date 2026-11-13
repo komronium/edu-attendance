@@ -16,3 +16,6 @@ oxu_cookie.tmp
 
 # brainstorm mockups and plan scratch
 .superpowers/
+
+# audit screenshots of the owner's real schedule: personal data, kept local (demo-* ones are committed)
+docs/audit/screenshots/real-*

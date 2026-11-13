@@ -1,0 +1,86 @@
+// Headless-Chrome driver over CDP: screenshots + layout/contrast metrics. Usage: node shoot.mjs jobs.json
+import { spawn } from "node:child_process";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const jobs = JSON.parse(readFileSync(process.argv[2], "utf8"));
+const port = 9333;
+const chrome = spawn("google-chrome", ["--headless=new", "--remote-debugging-port=" + port, "--user-data-dir=" + join(here, "chrome-profile"),
+  "--no-first-run", "--disable-extensions", "--hide-scrollbars", "--disable-gpu", "about:blank"], { stdio: "ignore" });
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+let info;
+for (let i = 0; i < 50; i++) { try { info = await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: "PUT" })).json(); break; } catch { await sleep(200); } }
+const ws = new WebSocket(info.webSocketDebuggerUrl);
+await new Promise((r) => (ws.onopen = r));
+let seq = 0; const waits = new Map(); const logs = [];
+ws.onmessage = (e) => {
+  const m = JSON.parse(e.data);
+  if (m.id && waits.has(m.id)) { waits.get(m.id)(m); waits.delete(m.id); }
+  if (m.method === "Runtime.consoleAPICalled" && ["error", "warning"].includes(m.params.type)) logs.push(m.params.type + ": " + m.params.args.map((a) => a.value ?? a.description).join(" "));
+  if (m.method === "Runtime.exceptionThrown") logs.push("exception: " + (m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text));
+  if (m.method === "Log.entryAdded" && m.params.entry.level === "error") logs.push("log: " + m.params.entry.text + " " + (m.params.entry.url || ""));
+};
+const send = (method, params = {}) => new Promise((r) => { const id = ++seq; waits.set(id, r); ws.send(JSON.stringify({ id, method, params })); });
+for (const d of ["Page", "Runtime", "Network", "Log"]) await send(d + ".enable");
+
+const METRICS = `(() => {
+  const lum = (c) => { const v = c.map((x) => { x /= 255; return x <= .03928 ? x / 12.92 : ((x + .055) / 1.055) ** 2.4; }); return .2126 * v[0] + .7152 * v[1] + .0722 * v[2]; };
+  const parse = (s) => { const m = /rgba?\\(([^)]+)\\)/.exec(s); if (!m) return null; const p = m[1].split(/[ ,\\/]+/).filter(Boolean).map(Number); return { rgb: p.slice(0, 3), a: p[3] === undefined ? 1 : p[3] }; };
+  const bgOf = (el) => { let acc = null; for (let n = el; n; n = n.parentElement) { const cs = getComputedStyle(n); if (cs.backgroundImage !== "none") return null; const c = parse(cs.backgroundColor); if (c && c.a > 0) { if (c.a < 1) return null; return c.rgb; } } return [255, 255, 255]; };
+  const low = [], small = [], clipped = [], tiny = [];
+  const seen = new Set();
+  for (const el of document.querySelectorAll("body *")) {
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) continue;
+    const cs = getComputedStyle(el);
+    if (cs.visibility === "hidden" || el.closest("[hidden], .sr-only, dialog:not([open])")) continue;
+    const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+    if (own) {
+      const fs = parseFloat(cs.fontSize), fg = parse(cs.color), bg = bgOf(el);
+      if (fs < 12) small.push(fs + "px " + el.tagName + "." + el.className + " " + el.textContent.trim().slice(0, 30));
+      if (fg && bg && fg.a === 1) {
+        const a = lum(fg.rgb), b = lum(bg), ratio = (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
+        const big = fs >= 24 || (fs >= 18.66 && parseInt(cs.fontWeight) >= 700);
+        const key = cs.color + "|" + bg.join(",") + "|" + el.className;
+        if (ratio < (big ? 3 : 4.5) && !seen.has(key)) { seen.add(key); low.push(ratio.toFixed(2) + " " + cs.color + " on rgb(" + bg + ") " + fs + "px " + el.tagName + "." + el.className + " «" + el.textContent.trim().slice(0, 30) + "»"); }
+      }
+      if (el.scrollWidth > el.clientWidth + 1 && cs.overflow !== "visible") clipped.push(el.tagName + "." + el.className + " «" + el.textContent.trim().slice(0, 40) + "»");
+    }
+    if (el.matches("a, button, input:not([type=hidden]), select, summary, [role=radio]") && (r.width < 24 || r.height < 24)) tiny.push(Math.round(r.width) + "x" + Math.round(r.height) + " " + el.tagName + "." + el.className + " " + (el.getAttribute("aria-label") || el.textContent.trim()).slice(0, 30));
+  }
+  const de = document.documentElement;
+  const unlabeled = [...document.querySelectorAll("button, a, input, select, textarea")].filter((el) => el.getBoundingClientRect().width && !(el.getAttribute("aria-label") || el.textContent.trim() || el.title || el.labels?.length || el.getAttribute("aria-labelledby") || el.placeholder)).map((el) => el.tagName + "." + el.className);
+  return JSON.stringify({ title: document.title, h1: document.querySelector("h1")?.textContent, docW: de.scrollWidth, docH: de.scrollHeight, vw: innerWidth, vh: innerHeight, overflowX: de.scrollWidth - innerWidth,
+    headings: [...document.querySelectorAll("h1,h2,h3")].filter((x) => x.getBoundingClientRect().width).map((x) => x.tagName + ":" + x.textContent.trim().slice(0, 40)),
+    nodes: document.querySelectorAll("#view *").length, low: low.slice(0, 25), small: [...new Set(small)].slice(0, 15), clipped: [...new Set(clipped)].slice(0, 15), tiny: [...new Set(tiny)].slice(0, 20), unlabeled: [...new Set(unlabeled)].slice(0, 10) });
+})()`;
+
+const out = {};
+mkdirSync(join(here, "shots"), { recursive: true });
+for (const j of jobs) {
+  logs.length = 0;
+  const w = j.w || 1440, hgt = j.h || 900;
+  await send("Emulation.setDeviceMetricsOverride", { width: w, height: hgt, deviceScaleFactor: 1, mobile: !!j.mobile });
+  await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: j.dark ? "dark" : "light" }] });
+  if (j.cookie) await send("Network.setCookie", { name: "session", value: j.cookie, url: new URL(j.url).origin, httpOnly: true });
+  await send("Page.navigate", { url: "about:blank" });
+  await sleep(100);
+  await send("Page.navigate", { url: j.url });
+  await sleep(j.wait || 1400);
+  if (j.run) { await send("Runtime.evaluate", { expression: j.run, awaitPromise: true }); await sleep(j.after || 600); }
+  const t0 = Date.now();
+  const res = await send("Runtime.evaluate", { expression: METRICS, returnByValue: true });
+  let metrics = {};
+  try { metrics = JSON.parse(res.result.result.value); } catch { metrics = { error: JSON.stringify(res).slice(0, 300) }; }
+  metrics.console = [...logs];
+  const full = j.full !== false;
+  const height = full ? Math.min(Math.max(metrics.docH || hgt, hgt), j.maxH || 2600) : hgt;
+  const shot = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true, clip: { x: 0, y: 0, width: w, height, scale: j.scale || 1 } });
+  writeFileSync(join(here, "shots", j.name + ".png"), Buffer.from(shot.result.data, "base64"));
+  out[j.name] = metrics;
+  console.log(j.name, "ok", Date.now() - t0 + "ms", "overflowX", metrics.overflowX, "low", metrics.low?.length, "console", metrics.console.length);
+}
+writeFileSync(join(here, process.argv[3] || "metrics.json"), JSON.stringify(out, null, 1));
+ws.close(); chrome.kill();
