@@ -35,8 +35,12 @@ say "new binary: $("$stage/attendance-linux-amd64" version)"
 say "live binary: $("$bin" version 2>/dev/null || echo 'older than the version command')"
 
 say "1. backup of the live database (as the service user)"
+# the new binary goes next to the live one first: DynamicUser implies PrivateTmp, so the backup unit
+# cannot see the staging directory in /tmp
+install -m 755 "$stage/attendance-linux-amd64" "$bin.new"
+trap 'rm -f "$bin.new"' EXIT
 systemd-run --wait --pipe --quiet -p DynamicUser=yes -p User=davomat -p StateDirectory=davomat \
-	-p UMask=0077 -E ATTENDANCE_DATA=$data "$stage/attendance-linux-amd64" backup --keep 0
+	-p UMask=0077 -E ATTENDANCE_DATA=$data "$bin.new" backup --keep 0
 
 say "2. rollback copies in $keep"
 mkdir -p "$keep"
@@ -58,8 +62,8 @@ say "unit changes (live -> new)"
 diff -u "$units/attendance.service" "$stage/attendance.service.example" || true
 
 cp -a "$bin" "$bin.prev"
-install -m 755 "$stage/attendance-linux-amd64" "$bin.new"
 mv -f "$bin.new" "$bin"
+trap - EXIT
 install -m 644 "$stage/attendance.service.example" "$units/attendance.service"
 systemctl daemon-reload
 
