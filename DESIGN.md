@@ -2,7 +2,7 @@
 
 Category standard, executed straight. The bar named by the owner: Apple Calendar and Reminders, Vercel, Stripe. No metaphors or themed worlds.
 
-Direction "Sokin" (chosen 2026-11-10 from three mockups): soft, roomy cards and a blue accent, with the orderliness of hairline tables and small section labels. Rejected: a dark sidebar with saturated colour (too colourful) and pure black-and-white (too contrasty).
+Direction (2026-11-13, at the owner's request): the design language of the owner's ai-business-copilot app. A navy sidebar, blue-grey surfaces, one brand blue, flat 12px cards with a hairline border, small uppercase table headers, heavy numbers. It replaces "Sokin" (2026-11-10: soft shadowed cards, a light sidebar), which had rejected a dark sidebar *with saturated colour*; this navy is muted and carries no colour of its own.
 
 ## Rule
 
@@ -14,28 +14,29 @@ Tokens live at the top of `web/app.css`, for light and dark.
 
 | Token | Light | Dark | Job |
 |---|---|---|---|
-| `--bg` | #f5f5f7 | #0b0b0c | page ground |
-| `--surface` | #ffffff | #161618 | cards, tables |
-| `--side` | #ececef | #111113 | sidebar |
-| `--text` / `--muted` | #1d1d1f / #66666b | #f5f5f7 / #a1a1a6 | text |
-| `--ink` | #0068d6 | #5aa9ff | the one primary action (same as the accent) |
-| `--accent` | #0068d6 | #5aa9ff | links, selection, meters |
-| `--hero` | blue-lilac tint | deep blue tint | the next-lesson band on the home page only |
-| `--bad` | #cf0f1f | #ff7168 | only what needs action; today in the timetable |
+| `--bg` | #f4f6f8 | #0b1620 | page ground |
+| `--surface` / `--surface-2` / `--surface-3` | #ffffff / #eef2f5 / #f8fafb | #12202d / #1d3144 / #172838 | cards; hovers, tracks, segmented controls; table header band |
+| `--line` / `--control` | #e2e8ee / #7d8d9f | #24384a / #5c7790 | hairlines; control borders (3:1 or better) |
+| `--side` | #0c2136 | #081019 | sidebar, always navy (`--nav-*` for its text, hover, current page, accent) |
+| `--text` / `--muted` | #0f2233 / #4a5d6e | #e8eef4 / #a9b8c6 | text |
+| `--ink` = `--accent` | #1f5fbf | #6ba6f5 | the one primary action, links, selection, meters |
+| `--ok` / `--warn` / `--bad` | #0e7c66 / #925a08 / #b4432f | #45c4a6 / #e3a84a / #ee8a76 | taken; attention; only what needs action |
+
+Inside `.sidebar` the shared tokens are re-pointed to the navy ones, so a control placed there needs no rules of its own.
 
 Subject colours (`--c1`..`--c8`) appear only in the timetable and the teaching load. Each is a clearly different hue: a 13% tint when attendance is open, 28% when taken, with the subject name in its own colour.
 
 ## Type
 
-Public Sans, owner's choice, tabular digits. Page title 34px bold, -.025em. Section title 17px semibold. Body 15px. Small 13px and 12px.
+Public Sans, owner's choice, tabular digits. Page title 24px extra-bold, -.02em; big numbers extra-bold. Section title 17px semibold. Body 15px. Small 13px and 12px.
 
 ## Shape and depth
 
-Cards: 20px radius, 24px padding, a two-layer soft shadow, no border. Controls: 12px radius, 1px border at 3:1 or better. Tables: hairlines, no filled header. Sidebar: grouped under small uppercase labels (Hisobot, Kurs · group, Tizim); the current page is a white pill with the card shadow and a blue icon.
+Cards: 12px radius, 24px padding, a 1px hairline (drawn as `--shadow`), no shadow. Dialogs: 16px radius, a deep shadow over a dark scrim. Controls: 8px radius, 1px border at 3:1 or better. Tables: hairlines; the header is a light band with 12px uppercase labels (not the timetable, whose header is the days). Sidebar: navy, grouped under small uppercase labels (Hisobot, Kurs · group, Tizim); the current page is a lighter navy row with a 3px blue bar at the left edge.
 
 ## Components
 
-- `.today-card`: the home page lead. `.today-top` is the next lesson on the `--hero` tint (time, subject, countdown pill, plan state, actions); under it today's lessons as rows with a subject-colour edge; a footer line with today's totals and tomorrow's first lesson.
+- `.today-card`: the home page lead. `.today-top` is the next lesson on a plain surface (time, subject, countdown pill, plan state, actions); under it today's lessons as rows with a subject-colour edge; a footer line with today's totals and tomorrow's first lesson.
 - `.sem-mark`: semester day, week and days left with a thin track, top right of the home page.
 - `.home-stats`: three cards (semester pace with a ring, this week's bars, the course group's attendance), each linking to its page.
 - `.pace-bar`: a track with a 2px `u` marker where the calendar says the plan should be today; `.pace-hero` and `.type-card` on the teaching load page use it.
@@ -46,7 +47,7 @@ Cards: 20px radius, 24px padding, a two-layer soft shadow, no border. Controls: 
 - Plan state: `Reja yo'q` (muted), `Reja bor` (accent), `Tayyor` (ok, with a check). It takes the status line of a lesson still to come; a lesson that is over shows its attendance instead.
 - Attendance state has one name per state on every page: `Olingan`, `Olinmoqda` (para still on), `Tugatilmagan` (para over, not finished), `Olinmagan` (never started).
 - Dates read as `8-noyabr` (year only when not this year); date inputs keep `kk.oo.yyyy`.
-- Toasts: white surface; red text only for errors.
+- Toasts: dark (the text colour as the ground); an error has a red edge on the left.
 
 ## Honest status
 
