@@ -98,6 +98,11 @@ service. `attendance version` prints the commit it was built from, and the start
 To roll back, put `attendance.prev` back and restart; a version that added a column made a backup first
 (see below). Never copy a laptop database over it.
 
+`scripts/deploy.sh` does all of that in one go (`make linux`, copy, backup, hardened unit, restart, health
+check, and the old binary and unit back if the new one is not healthy, then the daily backup timer); what it
+runs on the server is `deploy/install.sh`. `scripts/pull-backups.sh` copies the server's backups to this
+machine, the off-server copy.
+
 `deploy/` holds example nginx and systemd files. Check the live ones against them:
 
 1. nginx overwrites `X-Real-IP` with `$remote_addr` (the login lockout counts per that address). Live: yes.
