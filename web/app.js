@@ -350,6 +350,7 @@ async function lessonsView() {
   const came = finished.reduce((n, s) => n + s.came, 0);
   const todays = sessions.filter((s) => s.date === t).sort((a, b) => a.para - b.para);
   const stale = sessions.filter((s) => !s.finished_at && s.date !== t);
+  const open = todays.find((s) => !s.finished_at);
 
   const paraSel = h("select", { name: "para" }, [1, 2].map((p) => h("option", { value: String(p), text: paraText(p) })));
   const dateBox = dateField("date", t), dateIn = dateBox.input;
@@ -364,9 +365,11 @@ async function lessonsView() {
       h("h2", { id: "today-h", text: "Bugun" }), h("p", { class: "sub", text: longDay(t) }),
       todays.length ? h("ul", { class: "plain" }, todays.map((s) => h("li", {}, h("a", { class: "today-item", href: "#/dars/" + s.id },
         h("span", { text: paraText(s.para) }), s.finished_at ? h("span", { class: "muted", text: s.came + " / " + s.total }) : sessionChip(s))))) : null,
+      // an unfinished lesson of today is the next thing to do; starting another one waits under it
+      open ? h("a", { class: "button primary wide", href: "#/dars/" + open.id, text: paraText(open.para) + " davomatini tugatish" }) : null,
       freePara
-        ? h("button", { type: "button", class: "primary wide", text: paraText(freePara) + " davomatini boshlash", onclick: () => start(t, freePara) })
-        : h("p", { class: "muted", text: "Bugun ikkala para ham olingan." })),
+        ? h("button", { type: "button", class: open ? "wide" : "primary wide", text: paraText(freePara) + " davomatini boshlash", onclick: () => start(t, freePara) })
+        : open ? null : h("p", { class: "muted", text: "Bugun ikkala para ham olingan." })),
     stale.length ? h("section", { class: "card notice", "aria-labelledby": "stale-h" },
       h("h2", { id: "stale-h", text: "Tugatilmagan davomat" }),
       h("ul", { class: "plain" }, stale.map((s) => h("li", {}, h("a", { class: "today-item", href: "#/dars/" + s.id }, h("span", { text: dayText(s.date) + ", " + paraText(s.para) }), h("span", { text: "Davom ettirish" })))))) : null,
@@ -602,6 +605,10 @@ async function studentsView() {
   const nothing = h("p", { class: "card empty", hidden: true, text: "Bu ism bo'yicha hech kim topilmadi." });
   const table = h("div", { class: "card flush" }, h("table", { class: "students" }, h("thead", {}, head), tbody));
 
+  // the grade columns appear once anyone has a grade: two columns of dashes say nothing
+  const graded = students.some((s) => s.graded || s.average !== null);
+  const cols = STUDENT_COLS.filter(([key]) => graded || (key !== "points" && key !== "average"));
+  if (!graded && (sf.key === "points" || sf.key === "average")) sf.key = "owed";
   const render = () => {
     const q = sf.q.trim().toLowerCase();
     const cmp = (a, b) => {
@@ -613,7 +620,7 @@ async function studentsView() {
       return sf.dir * (x - y);
     };
     const list = students.filter((s) => !q || s.name.toLowerCase().includes(q)).sort((a, b) => b.active - a.active || cmp(a, b));
-    head.replaceChildren(...STUDENT_COLS.map(([key, text], i) => h("th", { scope: "col", class: (i ? "num" : "") + (key === "rate" ? " w-rate" : ""), "aria-sort": sf.key === key ? (sf.dir > 0 ? "ascending" : "descending") : null },
+    head.replaceChildren(...cols.map(([key, text], i) => h("th", { scope: "col", class: (i ? "num" : "") + (key === "rate" ? " w-rate" : ""), "aria-sort": sf.key === key ? (sf.dir > 0 ? "ascending" : "descending") : null },
       h("button", { type: "button", class: "sort", onclick: () => { if (sf.key === key) sf.dir = -sf.dir; else { sf.key = key; sf.dir = key === "name" ? 1 : -1; } render(); } },
         text, sf.key === key ? icon(sf.dir > 0 ? "up" : "down") : null))));
     tbody.replaceChildren(...list.map((s) => linkRow("#/talaba/" + s.id, [
@@ -624,8 +631,8 @@ async function studentsView() {
       h("td", { class: "num" + (s.retaken ? "" : " muted"), text: String(s.retaken) }),
       h("td", { class: "num" }, s.owed ? h("span", { class: "badge", text: String(s.owed) }) : h("span", { class: "muted", text: "0" })),
       h("td", { class: "num w-rate" }, h("span", { class: "rate" }, meter(s.rate), h("b", { text: pct(s.rate) }))),
-      h("td", { class: "num" + (s.graded ? "" : " muted"), text: s.graded ? fmtNum(s.points) : "–" }),
-      h("td", { class: "num" + (s.average === null ? " muted" : ""), text: s.average === null ? "–" : fmtNum(s.average) })], s.active ? null : "off")));
+      graded ? h("td", { class: "num" + (s.graded ? "" : " muted"), text: s.graded ? fmtNum(s.points) : "–" }) : null,
+      graded ? h("td", { class: "num" + (s.average === null ? " muted" : ""), text: s.average === null ? "–" : fmtNum(s.average) }) : null].filter(Boolean), s.active ? null : "off")));
     table.hidden = !list.length;
     nothing.hidden = list.length > 0;
   };
@@ -696,6 +703,9 @@ async function retakesView() {
   const items = r.items.filter((x) =>
     (rf.status === "all" || (rf.status === "owed" ? !x.retake_at : x.retake_at)) &&
     (!rf.day || x.date === rf.day) && (!rf.student || x.student_id === Number(rf.student)));
+  // what is still owed reads oldest first: the longest-waiting debt is the one to settle
+  if (rf.status === "owed") items.sort((a, b) => a.date.localeCompare(b.date) || a.para - b.para || a.name.localeCompare(b.name));
+  const ageOf = (d) => Math.round((Date.parse(today()) - Date.parse(d)) / 864e5);
 
   // master list: everyone with a missed lesson, the most owed first
   const people = new Map();
@@ -726,13 +736,14 @@ async function retakesView() {
     openSheet(x.name, f);
   };
 
-  const seg = (key, text) => h("button", { type: "button", class: "seg", "aria-pressed": String(rf.status === key), text, onclick: () => { rf.status = key; retakesView(); } });
+  const seg = (key, text, n) => h("button", { type: "button", class: "seg", "aria-pressed": String(rf.status === key), onclick: () => { rf.status = key; retakesView(); } }, text, h("span", { class: "seg-n", text: String(n) }));
   const daySel = h("select", { "aria-label": "Qoldirilgan sana", onchange: (e) => { rf.day = e.target.value; retakesView(); } },
     h("option", { value: "", text: "Hamma sanalar" }), days.map((d) => h("option", { value: d, selected: d === rf.day, text: dayText(d) + " " + weekday(d).slice(0, 3) })));
 
   const rows = items.map((x) => h("tr", { class: x.active ? null : "off" },
     h("td", {}, h("a", { class: "strong person", href: "#/talaba/" + x.student_id, text: x.name })),
-    h("td", { class: "nowrap" }, h("a", { href: "#/dars/" + x.session_id, text: dayText(x.date) }), h("span", { class: "muted", text: "  " + paraText(x.para) })),
+    h("td", { class: "nowrap" }, h("a", { href: "#/dars/" + x.session_id, text: dayText(x.date) }), h("span", { class: "muted", text: "  " + paraText(x.para) }),
+      !x.retake_at && ageOf(x.date) > 14 ? h("small", { class: "warn-text age", title: "Qoldirilganiga " + ageOf(x.date) + " kun bo'ldi", text: ageOf(x.date) + " kun kutmoqda" }) : null),
     h("td", { class: "clip muted", text: x.topic || "–" }),
     x.retake_at
       ? h("td", { class: "right nowrap" }, h("span", { class: "muted", text: retakeText(x) + "  " }),
@@ -743,11 +754,13 @@ async function retakesView() {
       : h("td", { class: "right" }, h("button", { type: "button", class: "small", text: "Qabul qilish", onclick: () => accept(x) }))));
 
   const shareBtn = h("button", { type: "button", text: "Talabalar uchun havola", onclick: () => shareSheet() });
-  show(pageHead("Qarzlar", COURSE.group + " · qoldirilgan darslar va ularni qayta topshirish", shareBtn),
-    h("div", { class: "tiles" }, tile("Jami qoldirilgan", r.missed), tile("Topshirilgan", r.retaken), tile("Qolgan", r.owed)),
+  const headSub = h("p", { class: "week-sum" }, h("span", { text: COURSE.group }),
+    h("span", { class: r.owed ? "neg" : "pos" }, h("b", { text: String(r.owed) }), " ta qolgan"),
+    h("span", {}, h("b", { text: String(r.retaken) }), " ta topshirilgan"), h("span", {}, h("b", { text: String(r.missed) }), " ta qoldirilgan jami"));
+  show(pageHead("Qarzlar", headSub, shareBtn),
     h("div", { class: "split left" }, master,
       h("div", { class: "stack" },
-        h("div", { class: "toolbar" }, h("div", { class: "seg-row", role: "group", "aria-label": "Holat" }, seg("owed", "Qolgan"), seg("done", "Topshirilgan"), seg("all", "Hammasi")),
+        h("div", { class: "toolbar" }, h("div", { class: "seg-row", role: "group", "aria-label": "Holat" }, seg("owed", "Qolgan", r.owed), seg("done", "Topshirilgan", r.retaken), seg("all", "Hammasi", r.missed)),
           current.older ? h("button", { type: "button", class: "seg older-toggle", "aria-pressed": String(rf.older), title: "Oldingi semestrlarning qarzlari ham", text: "Oldingi semestrlar (" + current.older + ")", onclick: () => { rf.older = !rf.older; retakesView(); } }) : null, daySel),
         rows.length ? h("div", { class: "card flush" }, h("table", {},
           h("thead", {}, h("tr", {}, h("th", { scope: "col", text: "Talaba" }), h("th", { scope: "col", text: "Dars" }), h("th", { scope: "col", text: "Mavzu" }), h("th", { scope: "col", class: "right", text: "Qayta topshirish" }))),
@@ -1744,12 +1757,14 @@ async function kpiView() {
     h("td", { class: "num", text: b.weight }), h("td", { class: "num", text: b.count }), h("td", { class: "num strong", text: b.score }), h("td", { class: "num muted", text: b.limit }));
   const others = kpi.papers.filter((p) => !works.some((w) => sameWork(p.title, w.title)));
 
+  const worksCard = h("section", { class: "card flush", "aria-labelledby": "works-h" }, h("h2", { id: "works-h", class: "card-title", text: "Ishlarim" }),
+    works.length ? h("ul", { class: "plain" }, works.map(workRow))
+      : h("p", { class: "empty-line", text: "Hali ish qo'shilmagan. «Yangi ish» bilan boshlang: saytga yuklangunicha bo'lgan jarayonni shu yerda kuzatasiz." }));
   show(withAge(data, "kpi", "Saytdagi keyingi o'zgarishlar bu yerda ko'rinmaydi.", pageHead("Ilmiy KPI", "Ishlaringiz jarayoni va to'plangan ball", h("button", { type: "button", class: "primary", onclick: addWork }, icon("plus"), "Yangi ish"))),
-    h("div", { class: "tiles" }, tile("To'plangan ball", score.toFixed(2)), tile("Jarayonda", active.length), tile("Yuklashga tayyor", ready.length), tile("Saytda tasdiqlangan", approved),
+    // the works' own totals appear once there are works; until then two zeros only push the bands down
+    h("div", { class: "tiles" }, tile("To'plangan ball", score.toFixed(2)), works.length ? [tile("Jarayonda", active.length), tile("Yuklashga tayyor", ready.length)] : null, tile("Saytda tasdiqlangan", approved),
       required.length ? tile("Minimal talablar", required.filter((b) => Number(b.count) >= Number(b.min)).length + " / " + required.length, "bajarilgan") : null),
-    h("section", { class: "card flush", "aria-labelledby": "works-h" }, h("h2", { id: "works-h", class: "card-title", text: "Ishlarim" }),
-      works.length ? h("ul", { class: "plain" }, works.map(workRow))
-        : h("p", { class: "empty-line", text: "Hali ish qo'shilmagan. «Yangi ish» bilan boshlang: saytga yuklangunicha bo'lgan jarayonni shu yerda kuzatasiz." })),
+    works.length ? worksCard : null,
     h("div", { class: "split" },
       h("div", { class: "card flush" }, h("table", {},
         h("thead", {}, h("tr", {}, h("th", { scope: "col", text: "Band" }), ["Vazn", "Soni", "Ball", "Cheklov"].map((x) => h("th", { scope: "col", class: "num", text: x })))),
@@ -1758,7 +1773,8 @@ async function kpiView() {
         h("section", { class: "card", "aria-labelledby": "papers-h" }, h("h2", { id: "papers-h", text: "Saytdagi ishlar" }),
           others.length ? h("ul", { class: "plain papers" }, others.map((p) => h("li", {},
             h("b", { text: p.title }), h("small", { text: p.band + " · " + p.date }), chip(p.status, /tasdiq/i.test(p.status) ? "ok" : /rad/i.test(p.status) ? "bad" : null, /tasdiq/i.test(p.status) ? "check" : null))))
-            : h("p", { class: "muted small", text: "Saytdagi barcha ishlar yuqorida bog'langan." })))));
+            : h("p", { class: "muted small", text: "Saytdagi barcha ishlar yuqorida bog'langan." })))),
+    works.length ? null : worksCard);
 }
 
 /* ------------------------------------------------------------ monthly KPI */
@@ -1849,7 +1865,7 @@ async function monthsView() {
     if (skipped(i)) return chip("Bajarib bo'lmaydi");
     if (ticked.has(i.title)) return chip("Saytda kutilmoqda", "live", "clock");
     if (now > 0) return chip("Jarayonda", "warn");
-    return chip(list.length ? "Boshlanmagan" : "Bajarilmagan");
+    return list.length ? null : chip("Bajarilmagan");   // not started is what the empty track already shows
   };
   const progressCell = (i) => {
     const list = stepsOf(i), now = stepNow(i);
@@ -1866,10 +1882,8 @@ async function monthsView() {
   };
   const actions = (i) => {
     if (graded(i)) return null;
-    const list = stepsOf(i), now = stepNow(i);
-    const next = !skipped(i) && list.length && now < list.length
-      ? h("button", { type: "button", class: "next-step", "aria-label": i.title + ": «" + list[now] + "» bajarildi", onclick: () => saveStep(i, now + 1) }, icon("check"), list[now]) : null;
-    return h("div", { class: "row-actions" }, next,
+    const list = stepsOf(i);   // the next stage is ticked on the track itself: no second button for it
+    return h("div", { class: "row-actions" },
       h("div", { class: "row-more" },
         skipped(i) ? h("button", { type: "button", class: "step-edit show", text: "Qaytarish", onclick: () => skip(i, false) })
           : h("button", { type: "button", class: "step-edit", text: "Bajarib bo'lmaydi", title: "Bu oy bajarilmaydi: ochiq bandlar va eslatmalardan chiqadi", onclick: () => skip(i, true) }),
