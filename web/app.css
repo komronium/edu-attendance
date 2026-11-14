@@ -560,9 +560,7 @@ ul.history { display: grid; gap: var(--s2); margin-top: var(--s3); }
 .sem-mark .pace-bar { width: 220px; flex: none; height: 4px; }
 .lead { display: grid; grid-template-columns: minmax(0, 1fr) var(--rail); gap: var(--s5); align-items: stretch; }
 .today-card { display: grid; align-content: start; padding: 0; overflow: hidden; }
-.today-top { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "eye eye" "time body" "act act"; gap: var(--s4) var(--s6); align-items: center; padding: 22px 28px 24px; background: var(--hero); border-bottom: 1px solid var(--hero-line); }
-.today-top .eyebrow { grid-area: eye; margin-bottom: -8px; color: var(--accent); font-size: var(--t-xs); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
-.today-top.live .eyebrow { color: var(--bad); }
+.today-top { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "time body" "act act"; gap: var(--s4) var(--s6); align-items: center; padding: 22px 28px 24px; background: var(--hero); border-bottom: 1px solid var(--hero-line); }
 .today-top.empty { grid-template-areas: "body"; grid-template-columns: minmax(0, 1fr); }
 .hero-time { grid-area: time; display: grid; gap: 2px; padding-right: var(--s6); border-right: 1px solid var(--hero-line); }
 .hero-time b { font-size: var(--t-hero); line-height: 1; font-weight: 800; letter-spacing: -.04em; }
@@ -573,6 +571,7 @@ ul.history { display: grid; gap: var(--s2); margin-top: var(--s3); }
 .hero-meta { color: var(--muted); }
 .hero-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); margin-top: var(--s2); font-size: var(--t-sm); }
 .hero-when { padding: 2px 10px; border-radius: var(--r-full); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.today-top.live .hero-when { background: var(--bad-soft); color: var(--bad); }
 .today-top.live .hero-when { background: var(--bad-soft); color: var(--bad); }
 .hero-topic { color: var(--muted); overflow-wrap: anywhere; }
 .hero-act { grid-area: act; display: flex; justify-content: flex-end; gap: var(--s2); }

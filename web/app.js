@@ -830,7 +830,7 @@ function courseCard(e, color) {
   if (s) return h("a", { class: "slot " + color + (s.finished_at ? " taken" : ""), href: "#/dars/" + s.id },
     lines(s.finished_at ? state(s.came + "/" + s.total, "check", "ok") : over ? state("Tugatilmagan", null, "bad") : state("Olinmoqda", null, "active")));
   const label = shortDate(e.date) + ", " + e.para + "-para";
-  if (e.date > t) return h("button", { type: "button", class: "slot " + color, "aria-label": COURSE.subject + ", " + label + ": dars rejasi", onclick: () => openPlan(e, route) }, lines(planState(planOf(e))));
+  if (e.date > t) return h("button", { type: "button", class: "slot " + color, "aria-label": COURSE.subject + ", " + label + ": dars rejasi", onclick: () => openPlan(e, route) }, lines(planStateIfAny(planOf(e))));
   return h("button", { type: "button", class: "slot " + color, "aria-label": COURSE.subject + ", " + label + ": davomatni boshlash", onclick: () => startCourse(e) },
     lines(over ? state("Olinmagan", null, "bad") : state("Davomatni boshlash", null, "active")));
 }
@@ -847,7 +847,7 @@ function siteCard(l, ctx, color, e) {
   const st = Timetable.siteStatus(l, ctx, today(), nowTime());
   const taken = st === "taken", coming = e && st === "coming";
   // "Noma'lum": the lesson ended after the site's list was last read, so the app cannot know
-  const status = coming ? planState(planOf(e)) : taken ? state("Olingan", "check", "ok") : st === "missing" ? state("Olinmagan", null, "bad") : st === "unknown" ? state("Noma'lum", null, "unknown") : null;
+  const status = coming ? planStateIfAny(planOf(e)) : taken ? state("Olingan", "check", "ok") : st === "missing" ? state("Olinmagan", null, "bad") : st === "unknown" ? state("Noma'lum", null, "unknown") : null;
   const lines = cardLines(l.subject, fmtType(l.type), l.group, fmtRoom(l.room), status);
   const cls = "slot " + color + (taken ? " taken" : "");
   if (coming) return h("button", { type: "button", class: cls, "aria-label": l.subject + ", " + shortDate(l.date) + ", " + l.para + "-para: dars rejasi", onclick: () => openPlan(e, route) }, lines);
@@ -942,7 +942,6 @@ function nextHero(e, t, now, action, note) {
   const site = e.kind === "site", plan = planOf(e);
   const label = note ? "Tugatilmagan dars" : isNow ? "Hozirgi dars" : "Keyingi dars";
   return h("section", { class: "today-top" + (isNow || note ? " live" : "") + (onDay ? "" : " later"), "aria-label": label },
-    h("span", { class: "eyebrow", text: label }),
     h("div", { class: "hero-time" }, h("b", { text: onDay ? (times ? times[0] : e.para + "-para") : date }),
       h("span", { text: onDay ? e.para + "-para" : [capital(weekday), times && times[0], e.para + "-para"].filter(Boolean).join(" · ") })),
     h("div", { class: "hero-body" },
@@ -980,6 +979,8 @@ function planState(p) {
   const st = planStage(p);
   return state(STAGES[st], st === "ready" ? "check" : null, st === "ready" ? "ok" : st === "planned" ? "active" : null);
 }
+// on a timetable card only a plan that exists is worth a line; "Reja yo'q" on every card is noise
+function planStateIfAny(p) { return planStage(p) === "none" ? null : planState(p); }
 function planChip(p) {
   const st = planStage(p);
   return chip(STAGES[st], st === "ready" ? "ok" : st === "planned" ? "live" : null, st === "ready" ? "check" : null);
@@ -2083,7 +2084,9 @@ async function homeView() {
   const tasks = [   // [link, icon, text]; the alert ones lead
     // a sync that was never set up is a choice, not an emergency: it waits under "Keyinroq"
     syncText && status.state !== "none" ? ["#/kabinet", "alert", syncText] : null,
-    ...clashesAhead.map((c) => ["#/jadval", "alert", "Ustma-ust: " + (relDay(c.date) ? capital(relDay(c.date)) : capital(longDay(c.date))) + ", " + c.para + "-para, " + c.entries.length + " ta dars bir vaqtda"]),
+    // a clash that repeats every week is one item: the weekday and para, then its dates
+    ...[...Map.groupBy(clashesAhead, (c) => weekday(c.date) + "|" + c.para).values()].map((list) => ["#/jadval", "alert",
+      "Ustma-ust: " + (list.length > 1 ? "har " + weekday(list[0].date) : capital(relDay(list[0].date) || weekday(list[0].date))) + ", " + list[0].para + "-para, " + list[0].entries.length + " ta dars bir vaqtda (" + list.map((c) => shortDate(c.date)).join(", ") + ")"]),
     todo ? ["#/jadval", "alert", COURSE.group + ": " + todo + " ta darsda davomat olinmagan"] : null,
     gaps ? ["#/jadval", "alert", "Saytda " + gaps + " ta darsda davomat olinmagan"] : null,
     todayUnplanned.length ? ["#/reja", "alert", "Bugun " + paras(todayUnplanned) + ": reja yo'q"] : null,

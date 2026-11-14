@@ -36,7 +36,7 @@ Cards: 12px radius, 24px padding, a 1px hairline (drawn as `--shadow`), no shado
 
 ## Components
 
-- `.today-card`: the home page lead. `.today-top` is the next lesson on a plain surface (time, subject, countdown pill, plan state, actions); under it today's lessons as rows with a subject-colour edge; a footer line with today's totals and tomorrow's first lesson.
+- `.today-card`: the home page lead. `.today-top` is the next lesson on a plain surface (time, subject, countdown pill, plan state, actions; no eyebrow label: the pill says whether it is now, next or over, red when over); under it today's lessons as rows with a subject-colour edge; a footer line with today's totals and tomorrow's first lesson.
 - `.sem-mark`: semester day, week and days left with a thin track, top right of the home page.
 - `.home-stats`: three cards (semester pace with a ring, this week's bars, the course group's attendance), each linking to its page.
 - `.pace-bar`: a track with a 2px `u` marker where the calendar says the plan should be today; `.pace-hero` and `.type-card` on the teaching load page use it.
@@ -47,7 +47,7 @@ Cards: 12px radius, 24px padding, a 1px hairline (drawn as `--shadow`), no shado
 - `.day-strip` (Dars rejasi): the next seven days with lessons as a row of day buttons (`.day-pick`: weekday, date, `k / n tayyor`); the pressed one opens below as one table. Green when all are ready, red with an alert when the day has a clash. It replaces a folded "Keyingi kunlar" list.
 - Plan rows say the action, not the absence: a lesson without a plan shows `Rejalash` (accent, plan icon), never "Reja yo'q" and "Mavzu yozilmagan" on every row. The syllabus's next topic is offered once per class as a dashed `.suggest` button that writes it in one click. Rows take the focus: ↑/↓ walk, Enter opens.
 - Clashes (two lessons on one para): `.clash-notice` (a red card naming each clash), `.clash-badge` ("Ustma-ust" pill), a red-ringed timetable cell, a faint red row in plans. Red because a person cannot teach two groups at once: it always needs action.
-- Plan state: `Reja yo'q` (muted), `Reja bor` (accent), `Tayyor` (ok, with a check). It takes the status line of a lesson still to come; a lesson that is over shows its attendance instead.
+- Plan state: `Reja yo'q` (muted), `Reja bor` (accent), `Tayyor` (ok, with a check). On a timetable card only `Reja bor` and `Tayyor` are shown; no plan leaves the line empty. It takes the status line of a lesson still to come; a lesson that is over shows its attendance instead.
 - Attendance state has one name per state on every page: `Olingan`, `Olinmoqda` (para still on), `Tugatilmagan` (para over, not finished), `Olinmagan` (never started).
 - Dates read as `8-noyabr` (year only when not this year); date inputs keep `kk.oo.yyyy`.
 - Toasts: dark (the text colour as the ground); an error has a red edge on the left.
