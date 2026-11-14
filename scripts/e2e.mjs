@@ -18,7 +18,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // Remove an entry when its task is done; the script says so when one starts passing.
 const EXPECTED = {};
 
-const ROUTES = ["#/", "#/jadval", "#/reja", "#/yuklama", "#/ilmiy-kpi", "#/ustama", "#/darslar", "#/dars/8", "#/talabalar", "#/talaba/1", "#/qarzlar", "#/bildirishnomalar", "#/kabinet"];
+const ROUTES = ["#/", "#/jadval", "#/reja", "#/yuklama", "#/ilmiy-kpi", "#/ustama", "#/guruh", "#/dars/8", "#/guruh/talabalar", "#/talaba/1", "#/guruh/qarzlar", "#/guruh/mavzular", "#/bildirishnomalar", "#/sozlamalar", "#/darslar", "#/talabalar", "#/qarzlar", "#/kabinet"];
 const SIZES = [[1280, 720], [1440, 900]];
 const TIMETABLE_WIDTHS = [1024, 1280, 1366, 1440, 1920];
 

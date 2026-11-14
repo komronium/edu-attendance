@@ -46,7 +46,7 @@ type publicPage struct {
 var publicTmpl = template.Must(template.New("public").Parse(`<!doctype html>
 <html lang="uz"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow"><title>Qayta topshirish{{if .Title}} · {{.Title}}{{end}}</title>
-<link rel="icon" href="/favicon.svg" type="image/svg+xml"><script src="/theme.js"></script><link rel="stylesheet" href="/app.css"></head>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml"><script src="/theme.js"></script><link rel="stylesheet" href="/css/tokens.css"><link rel="stylesheet" href="/app.css"></head>
 <body class="public"><main class="public-page">
 <header class="page-head"><div><h1>Qayta topshirish</h1>
 <p class="sub">{{if .Title}}{{.Title}} · {{end}}{{.Updated}} holatiga</p></div></header>
@@ -69,7 +69,7 @@ var publicTmpl = template.Must(template.New("public").Parse(`<!doctype html>
 const publicGone = `<!doctype html>
 <html lang="uz"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow"><title>Havola ishlamaydi</title>
-<link rel="icon" href="/favicon.svg" type="image/svg+xml"><script src="/theme.js"></script><link rel="stylesheet" href="/app.css"></head>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml"><script src="/theme.js"></script><link rel="stylesheet" href="/css/tokens.css"><link rel="stylesheet" href="/app.css"></head>
 <body class="public"><main class="public-page"><p class="card empty">Bu havola eskirgan yoki noto'g'ri. Yangi havolani o'qituvchidan so'rang.</p></main></body></html>`
 
 func (s *Server) publicRetakes(w http.ResponseWriter, r *http.Request, token string) {

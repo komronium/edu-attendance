@@ -32,7 +32,7 @@ const csp = "default-src 'none'; script-src 'self'; style-src 'self'; font-src '
 
 const loginPage = `<!doctype html>
 <html lang="uz"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>attendance</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><script src="/theme.js"></script><link rel="stylesheet" href="/app.css"></head>
+<title>attendance</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><script src="/theme.js"></script><link rel="stylesheet" href="/css/tokens.css"><link rel="stylesheet" href="/app.css"></head>
 <body class="login"><form method="post" action="/login" class="login-box">
 <div class="login-brand"><span class="logo" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><h1>attendance</h1></div>
 <label for="password">Parol</label>
@@ -220,7 +220,7 @@ func clientIP(r *http.Request) string {
 }
 
 func isPublic(p string) bool {
-	return strings.HasPrefix(p, "/fonts/") || strings.HasPrefix(p, "/app.css") || p == "/theme.js" || p == "/public.js" || p == "/favicon.svg"
+	return strings.HasPrefix(p, "/fonts/") || strings.HasPrefix(p, "/app.css") || strings.HasPrefix(p, "/css/") || p == "/theme.js" || p == "/public.js" || p == "/favicon.svg"
 }
 
 func (s *Server) get(w http.ResponseWriter, r *http.Request) {

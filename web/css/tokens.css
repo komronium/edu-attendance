@@ -1,0 +1,52 @@
+/* Design tokens (docs/REDESIGN.md §5). Components use these names, never a literal colour, size or gap.
+   Light is the default; the dark values are written once, under data-theme="dark", which theme.js sets
+   before the first paint (from the saved choice, else from the system). Text pairs are >= 4.5:1 and
+   control borders >= 3:1 in both themes. */
+:root {
+  color-scheme: light;
+  /* surfaces */
+  --bg: #ffffff; --bg-side: #f6f7f9; --bg-sunk: #f1f3f5; --bg-raise: #ffffff;
+  --line: #e6e8eb; --line-strong: #d0d5da; --control: #7d8793;
+  /* text */
+  --text: #12181f; --muted: #586472;
+  /* the one brand blue: primary action, links, selection, meters */
+  --accent: #1f5fbf; --accent-text: #ffffff; --accent-soft: #eaf1fb; --accent-hover: #194e9e; --ring: rgb(31 95 191 / .3);
+  /* state: confirmed, old or estimated, needs action now */
+  --ok: #0e7c66; --ok-soft: #e5f4ef; --warn: #925a08; --warn-soft: #fbf1df; --bad: #b4432f; --bad-soft: #fbeae6; --bad-solid: #b4432f;
+  --shadow-float: 0 12px 32px rgb(18 24 31 / .12), 0 1px 3px rgb(18 24 31 / .08); --scrim: rgb(18 24 31 / .45);
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23586472' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  /* subject colours, fixed order; only the timetable and the teaching load use them */
+  --c1: #2a78d6; --c2: #e8702a; --c3: #1f9d55; --c4: #8a56d8; --c5: #dc4f8e; --c6: #0e93a8; --c7: #b98a00; --c8: #e0474c;
+
+  /* type: six sizes */
+  --t-hero: 2.5rem; --t-title: 1.5rem; --t-head: 1.0625rem; --t-body: .9375rem; --t-small: .8125rem; --t-micro: .75rem;
+  --font: "Public Sans", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  /* space: a 4px grid */
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px; --s8: 64px;
+  /* shape */
+  --r-sm: 6px; --r-md: 10px; --r-lg: 14px; --r-full: 999px;
+  /* motion */
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+  /* frame */
+  --sidebar: 216px; --rail: 340px;
+
+  /* old names, kept until the pages that use them are rebuilt (docs/REDESIGN.md §12); each maps to a token above */
+  --surface: var(--bg); --surface-2: var(--bg-sunk); --surface-3: var(--bg-sunk); --select: rgb(18 24 31 / .06);
+  --ink: var(--accent); --ink-text: var(--accent-text); --hero: var(--bg); --hero-line: var(--line);
+  --shadow: 0 0 0 1px var(--line); --shadow-raise: 0 1px 2px rgb(18 24 31 / .1); --shadow-lg: var(--shadow-float);
+  --toast-accent: #7db3f7; --side: var(--bg-side); --pad: 24px; --r-xs: 4px; --r-dialog: 14px;
+  --t-xs: var(--t-micro); --t-sm: var(--t-small); --t-md: var(--t-body); --t-lg: var(--t-head); --t-xl: var(--t-title);
+  --t-stat: 1.5rem; --t-stat-lg: var(--t-hero);
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0e1116; --bg-side: #0a0d11; --bg-sunk: #1a1f27; --bg-raise: #161a21;
+  --line: #232a33; --line-strong: #343d49; --control: #6b7685;
+  --text: #e9edf2; --muted: #a3adb8;
+  --accent: #6ba6f5; --accent-text: #08121c; --accent-soft: #17304d; --accent-hover: #8dbbf8; --ring: rgb(107 166 245 / .35);
+  --ok: #45c4a6; --ok-soft: #12332e; --warn: #e3a84a; --warn-soft: #3a2c14; --bad: #ee8a76; --bad-soft: #3d1f19; --bad-solid: #c4503a;
+  --shadow-float: 0 12px 32px rgb(0 0 0 / .5), 0 1px 3px rgb(0 0 0 / .4); --scrim: rgb(0 0 0 / .6);
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a3adb8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  --c1: #4c97f0; --c2: #f0853f; --c3: #3cbd74; --c4: #a57cec; --c5: #ec6ba4; --c6: #30b4c9; --c7: #d6a720; --c8: #f06a6e;
+  --select: rgb(255 255 255 / .07); --shadow-raise: 0 1px 2px rgb(0 0 0 / .4); --toast-accent: #1f5fbf;
+}

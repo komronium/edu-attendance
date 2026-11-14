@@ -41,7 +41,7 @@ the usual sync request, so the owner-ID check still applies. If no attendance ta
 used last (default: the live site) is opened in the background and closed after the sync; if it asks
 for the app password first, the cookie waits until you have logged in there. The toolbar icon shows
 `…` while syncing, `✓` when done and `!` when something needs you. The same session is not sent
-twice within six hours. The Kabinet button "digital.oxu.uz ga kirish" still works and syncs at once.
+twice within six hours. The Sozlamalar button "digital.oxu.uz ga kirish" still works and syncs at once.
 Without the extension the cookie can still be pasted by hand.
 
 The session cookie is handed only to an attendance page whose exact address (port included) is allowed:
@@ -163,7 +163,7 @@ and warns.
 
 ## New semester
 
-Kabinet → Semestr → "Yangi semestr": a database copy is made first, the new start and length are saved,
+Sozlamalar → Semestr → "Yangi semestr": a database copy is made first, the new start and length are saved,
 every student is archived (not deleted), and the earlier lessons and debts stay under "Oldingi semestrlar".
 The course's lessons are generated only inside the semester's dates, so none appear after it ends. The
 group, subject and days are still the `COURSE` constant in `web/lib/rules.js`.
@@ -222,7 +222,7 @@ they would need a push service.
 
 ## digital.oxu.uz sync
 
-The Kabinet page is the sync box and an overview of the sections fed from digital.oxu.uz: Dars
+The Sozlamalar page is the sync box and an overview of the sections fed from digital.oxu.uz: Dars
 jadvali, Yuklama, Ilmiy KPI and Oylik KPI. The site has no API, so `internal/oxu` parses its HTML with GET requests only. You log
 in to the site yourself and paste your session cookie into the page: login has a robot check and is
 not automated. A cookie that works is kept in `oxu_cookie` in the data directory (mode 0600, never
@@ -230,7 +230,7 @@ logged, never sent to the page) and the site is read every 30 minutes, every 5 h
 08:00 (constants in `internal/server/syncer.go`). When the session dies, syncing stops and the page
 asks for a new cookie. A browser keeps the same session cookie when another person logs in, so every
 sync reads the account id (`Maxsus kod`) first and again at the end, and refuses anything but the
-owner set on the Kabinet page; if the id cannot be read nothing is saved, and synced data is tagged
+owner set on the Sozlamalar page; if the id cannot be read nothing is saved, and synced data is tagged
 with its account and hidden if it does not match. Treat that file like a password while the session is valid. Salary columns
 are never read. The result is kept as one JSON snapshot in the `oxu_snapshot` table.
 

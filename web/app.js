@@ -249,25 +249,42 @@ async function refreshBadge() {
 }
 
 /* ------------------------------------------------------------ sidebar */
-const PAGE_TITLES = { home: "Bosh sahifa", schedule: "Dars jadvali", plans: "Dars rejasi", load: "Yuklama", kpi: "Ilmiy KPI", months: "Ustama", lessons: "Darslar", students: "Talabalar", retakes: "Qarzlar", notes: "Bildirishnomalar", cabinet: "Kabinet" };
-document.getElementById("course-name").textContent = COURSE.group;
+const PAGE_TITLES = { home: "Bugun", schedule: "Jadval", load: "Yuklama", kpi: "Ilmiy KPI", months: "Ustama", group: COURSE.group, settings: "Sozlamalar" };
+document.getElementById("course-name").textContent = COURSE.group;   // the sidebar item for the course is named by its group
 
 /* ------------------------------------------------------------ routes */
+// New addresses first; the old ones stay as aliases, so bookmarks, notifications and links inside the app keep working.
 const routes = [
   [/^#?\/?$/, homeView, "home"],
   [/^#\/jadval$/, scheduleView, "schedule"],
-  [/^#\/reja$/, plansView, "plans"],
-  [/^#\/darslar$/, lessonsView, "lessons"],
+  [/^#\/(?:reja|jadval\/royxat)$/, plansView, "schedule"],
   [/^#\/yuklama$/, loadView, "load"],
   [/^#\/ilmiy-kpi$/, kpiView, "kpi"],
   [/^#\/(?:ustama|oylik-kpi)$/, monthsView, "months"],
-  [/^#\/dars\/(\d+)$/, lessonView, "lessons"],
-  [/^#\/talabalar$/, studentsView, "students"],
-  [/^#\/talaba\/(\d+)$/, studentView, "students"],
-  [/^#\/qarzlar$/, retakesView, "retakes"],
-  [/^#\/kabinet$/, cabinetView, "cabinet"],
-  [/^#\/bildirishnomalar$/, notesView, "notes"],
+  [/^#\/(?:guruh|darslar)$/, lessonsView, "group"],
+  [/^#\/dars\/(\d+)$/, lessonView, "group"],
+  [/^#\/(?:guruh\/talabalar|talabalar)$/, studentsView, "group"],
+  [/^#\/talaba\/(\d+)$/, studentView, "group"],
+  [/^#\/(?:guruh\/qarzlar|qarzlar)$/, retakesView, "group"],
+  [/^#\/guruh\/mavzular$/, topicsView, "group"],
+  [/^#\/(?:sozlamalar|kabinet)$/, cabinetView, "settings"],
+  [/^#\/bildirishnomalar$/, notesView, "settings"],
 ];
+// Pages that share one sidebar item get a row of links above the title.
+const SUBNAVS = [
+  { label: null, items: [["Setka", "#/jadval", /^#\/jadval$/], ["Ro'yxat", "#/reja", /^#\/(?:reja|jadval\/royxat)$/]] },
+  { label: () => COURSE.group, items: [["Darslar", "#/guruh", /^#\/(?:guruh|darslar)$/], ["Talabalar", "#/guruh/talabalar", /^#\/(?:guruh\/talabalar|talabalar)$/], ["Qarzlar", "#/guruh/qarzlar", /^#\/(?:guruh\/qarzlar|qarzlar)$/], ["Mavzular", "#/guruh/mavzular", /^#\/guruh\/mavzular$/]] },
+  { label: null, items: [["Sayt va semestr", "#/sozlamalar", /^#\/(?:sozlamalar|kabinet)$/], ["Bildirishnomalar", "#/bildirishnomalar", /^#\/bildirishnomalar$/]] },
+];
+function subnav(hash) {
+  const set = SUBNAVS.find((g) => g.items.some((i) => i[2].test(hash)));
+  if (!set) return null;
+  const owed = document.getElementById("owed-badge");
+  return h("nav", { class: "subnav", "aria-label": "Sahifa bo'limlari" },
+    set.label ? h("span", { class: "subnav-label", text: set.label() }) : null,
+    set.items.map(([text, href, re]) => h("a", { href, "aria-current": re.test(hash) ? "page" : null },
+      text, text === "Qarzlar" && owed && !owed.hidden ? h("span", { class: "subnav-n", text: owed.textContent }) : null)));
+}
 async function route() {
   const hash = location.hash || "#/";
   for (const [re, fn, nav] of routes) {
@@ -320,7 +337,7 @@ function show(...nodes) {
   const here = location.hash || "#/", same = shownHash === here;
   const keep = same ? { y: window.scrollY, open: new Set([...view.querySelectorAll("details[open]")].map(placeKey)),
     focus: view.contains(document.activeElement) && document.activeElement !== view ? placeKey(document.activeElement) : null } : null;
-  view.replaceChildren(...nodes.flat(Infinity).filter(Boolean));
+  view.replaceChildren(...[subnav(here), ...nodes.flat(Infinity)].filter(Boolean));
   shownHash = here;
   if (!keep) return;
   for (const d of view.querySelectorAll("details")) if (keep.open.has(placeKey(d))) d.open = true;
@@ -352,32 +369,25 @@ async function lessonsView() {
   const stale = sessions.filter((s) => !s.finished_at && s.date !== t);
   const open = todays.find((s) => !s.finished_at);
 
-  const paraSel = h("select", { name: "para" }, [1, 2].map((p) => h("option", { value: String(p), text: paraText(p) })));
-  const dateBox = dateField("date", t), dateIn = dateBox.input;
-  const suggest = async () => {     // offer the para of that day that is still free
-    try { const { para } = await api("GET", "/api/free-para?date=" + encodeURIComponent(dateIn.value)); if (para) paraSel.value = String(para); } catch (err) { /* keep the choice */ }
+  // another date: a sheet, so the page keeps one primary action
+  const otherDate = () => {
+    const paraSel = h("select", { name: "para" }, [1, 2].map((p) => h("option", { value: String(p), text: paraText(p) })));
+    const dateBox = dateField("date", t), dateIn = dateBox.input;
+    dateIn.addEventListener("change", async () => {     // offer the para of that day that is still free
+      try { const { para } = await api("GET", "/api/free-para?date=" + encodeURIComponent(dateIn.value)); if (para) paraSel.value = String(para); } catch (err) { /* keep the choice */ }
+    });
+    const form = h("form", { class: "stack", onsubmit: (e) => { e.preventDefault(); sheetBox.close(); start(dateIn.value, Number(paraSel.value)); } },
+      h("div", { class: "pair" }, field("Sana", dateBox), field("Para", paraSel)),
+      h("div", { class: "dialog-actions" }, h("button", { type: "button", text: "Yopish", onclick: () => sheetBox.close() }), h("button", { type: "submit", class: "primary", text: "Davomatni boshlash" })));
+    openSheet("Boshqa sana", form);
   };
-  dateIn.addEventListener("change", suggest);
-  suggest();
-
-  const rail = h("aside", { class: "rail" },
-    h("section", { class: "card today", "aria-labelledby": "today-h" },
-      h("h2", { id: "today-h", text: "Bugun" }), h("p", { class: "sub", text: longDay(t) }),
-      todays.length ? h("ul", { class: "plain" }, todays.map((s) => h("li", {}, h("a", { class: "today-item", href: "#/dars/" + s.id },
-        h("span", { text: paraText(s.para) }), s.finished_at ? h("span", { class: "muted", text: s.came + " / " + s.total }) : sessionChip(s))))) : null,
-      // an unfinished lesson of today is the next thing to do; starting another one waits under it
-      open ? h("a", { class: "button primary wide", href: "#/dars/" + open.id, text: paraText(open.para) + " davomatini tugatish" }) : null,
-      freePara
-        ? h("button", { type: "button", class: open ? "wide" : "primary wide", text: paraText(freePara) + " davomatini boshlash", onclick: () => start(t, freePara) })
-        : open ? null : h("p", { class: "muted", text: "Bugun ikkala para ham olingan." })),
-    stale.length ? h("section", { class: "card notice", "aria-labelledby": "stale-h" },
-      h("h2", { id: "stale-h", text: "Tugatilmagan davomat" }),
-      h("ul", { class: "plain" }, stale.map((s) => h("li", {}, h("a", { class: "today-item", href: "#/dars/" + s.id }, h("span", { text: dayText(s.date) + ", " + paraText(s.para) }), h("span", { text: "Davom ettirish" })))))) : null,
-    h("section", { class: "card", "aria-labelledby": "other-h" },
-      h("h2", { id: "other-h", text: "Boshqa sana" }),
-      h("form", { class: "stack", onsubmit: (e) => { e.preventDefault(); start(dateIn.value, Number(paraSel.value)); } },
-        h("div", { class: "pair" }, field("Sana", dateBox), field("Para", paraSel)),
-        h("button", { type: "submit", class: "wide", text: "Davomatni boshlash" }))));
+  // an unfinished lesson of today is the next thing to do; starting another one waits beside it
+  const actions = [
+    open ? h("a", { class: "button primary", href: "#/dars/" + open.id, text: paraText(open.para) + " davomatini tugatish" }) : null,
+    freePara ? h("button", { type: "button", class: open ? null : "primary", text: paraText(freePara) + " davomatini boshlash", onclick: () => start(t, freePara) }) : null,
+    h("button", { type: "button", class: "quiet", text: "Boshqa sana", onclick: otherDate })];
+  const staleNote = stale.length ? h("section", { class: "notice-line warn", role: "status" }, icon("alert"),
+    h("p", {}, h("b", { text: "Tugatilmagan davomat: " }), stale.map((s, i) => [i ? ", " : "", h("a", { href: "#/dars/" + s.id, text: dayText(s.date) + ", " + paraText(s.para) })]))) : null;
 
   // a lesson without a topic is a gap in the record: the plan's topic is offered, otherwise it is flagged
   const topicCell = (s) => {
@@ -403,16 +413,13 @@ async function lessonsView() {
         h("td", { class: "nowrap muted", text: paraText(s.para) }),
         topicCell(s),
         h("td", { class: "num nowrap" }, s.finished_at ? h("b", { class: "came" + (s.total && s.came / s.total < 0.8 ? " low" : ""), title: (s.total - s.came) + " ta talaba kelmadi", text: s.came + "/" + s.total }) : sessionChip(s))]))))))
-    : h("p", { class: "card empty", text: "Hali davomat olinmagan. O'ngdagi tugma bilan birinchisini boshlang." });
+    : h("p", { class: "card empty", text: "Hali davomat olinmagan. Yuqoridagi tugma bilan birinchisini boshlang." });
   };
   const table = [tableOf(sessions),
     older.length ? h("details", { class: "fold-line older", "data-key": "older-lessons" }, h("summary", { text: "Oldingi semestrlar (" + older.length + " ta dars)" }), tableOf(older)) : null];
 
-  show(pageHead("Darslar", COURSE.subject + " · " + COURSE.group),
-    h("div", { class: "tiles" },
-      tile("Darslar", sessions.length, sessions.length > finished.length ? sessions.length - finished.length + " tasi tugatilmagan" : "Hammasi tugatilgan"), tile("O'rtacha davomat", seats ? pct(100 * came / seats) : "–"),
-      tile("Qolgan qarzlar", debts.owed), tile("Topshirilgan", debts.retaken)),
-    h("div", { class: "split" }, h("div", {}, table), rail));
+  const lead = [sessions.length + " ta dars", seats ? pct(100 * came / seats) + " davomat" : null, sessions.length > finished.length ? sessions.length - finished.length + " tasi tugatilmagan" : null].filter(Boolean).join(" · ");
+  show(pageHead("Darslar", COURSE.subject + " · " + lead, actions), staleNote, table);
 }
 
 /* ------------------------------------------------------------ one lesson */
@@ -470,7 +477,7 @@ async function lessonView(id) {
     const paint = () => {
       btn.setAttribute("aria-pressed", String(!!st.present));
       btn.setAttribute("aria-label", st.name + ": " + (st.present ? "keldi" : "kelmadi"));
-      btn.replaceChildren(icon(st.present ? "check" : "x"), st.present ? "Keldi" : "Kelmadi");
+      btn.replaceChildren(...(st.present ? [icon("check")] : [icon("x"), "Kelmadi"]));
       tag.hidden = !st.retake_at;
       tr.classList.toggle("absent", !st.present);
     };
@@ -506,6 +513,14 @@ async function lessonView(id) {
     find.value = ""; narrow(); find.focus();
   });
 
+  // grades are rare: the column is drawn only when someone has one, or when the teacher asks for it
+  let grading = s.students.some((x) => x.grade !== null && x.grade !== undefined);
+  const gradeBtn = h("button", { type: "button", class: "quiet", onclick: () => { grading = !grading; paintGrading(); if (grading && grades[0]) grades[0].focus(); } });
+  const paintGrading = () => {
+    gradeBtn.setAttribute("aria-pressed", String(grading)); gradeBtn.textContent = grading ? "Baholarni yashirish" : "Baho qo'yish";
+    view.querySelector(".roster-cols")?.classList.toggle("grading", grading);
+  };
+  paintGrading();
   const topic = h("input", { name: "topic", value: s.topic || (plan && plan.topic) || "", maxlength: "200", autocomplete: "off", placeholder: "Masalan: Sikllar" });
   const finishBtn = h("button", { type: "button", class: "primary wide", text: s.finished_at ? "Saqlash" : "Davomatni tugatish", onclick: async () => {
       finishBtn.disabled = true;
@@ -524,7 +539,7 @@ async function lessonView(id) {
 
   const rail = h("aside", { class: "rail sticky" },
     h("section", { class: "card stack", "aria-label": "Davomat holati" }, status, field("Mavzu", topic), finishBtn,
-      s.students.length ? h("button", { type: "button", class: "wide", text: "Hammasi keldi", onclick: allPresent }) : null),
+      s.students.length ? h("div", { class: "rail-links" }, h("button", { type: "button", class: "quiet", text: "Hammasi keldi", onclick: allPresent }), gradeBtn) : null),
     h("section", { class: "card stack plan-card", "aria-labelledby": "plan-h" },
       h("div", { class: "plan-card-head" }, h("h2", { id: "plan-h", text: "Dars rejasi" }), plan && plan.outcome ? chip(OUTCOMES[plan.outcome], plan.outcome === "done" ? "ok" : "warn") : planChip(plan)),
       plan && plan.items.length ? h("ul", { class: "plain plan-list" }, plan.items.map((x) => h("li", { class: x.done ? "done" : null }, icon(x.done ? "check" : "dot"), h("span", { text: x.text })))) : null,
@@ -562,9 +577,16 @@ async function lessonView(id) {
   show(back("#/darslar", "Darslar"),
     pageHead(COURSE.subject + " · " + COURSE.group,
       [capital(longDay(s.date)), paraText(s.para), slotTimes ? slotTimes.join("–") : null, s.room || null, when].filter(Boolean).join(" · "), sessionChip(s)),
-    h("div", { class: "split" },
+    h("div", { class: "split", onkeydown: (e) => {
+        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); finishBtn.click(); return; }
+        if ((e.key === "ArrowDown" || e.key === "ArrowUp") && e.target.matches?.("button.state")) {
+          e.preventDefault();
+          const all = [...view.querySelectorAll("table.roster tbody tr.tap:not([hidden]) button.state")], i = all.indexOf(e.target);
+          (all[i + (e.key === "ArrowDown" ? 1 : -1)] || e.target).focus();
+        }
+      } },
       h("div", {}, s.students.length ? h("div", { class: "roster-find" }, field("Talabani topish", find), found) : null,
-        s.students.length ? h("div", { class: "card flush roster-cols" + (half < rows.length ? " two" : "") },
+        s.students.length ? h("div", { class: "card flush roster-cols" + (half < rows.length ? " two" : "") + (grading ? " grading" : "") },
           rosterTable(rows.slice(0, half), noMatch, 0), half < rows.length ? rosterTable(rows.slice(half), null, 1) : null)
         : h("p", { class: "card empty" }, "Ro'yxatda talaba yo'q. ", h("a", { href: "#/talabalar", text: "Talabalarni qo'shing" })),
         (s.missing || []).length ? h("p", { class: "roster-missing" }, (s.missing.length === 1 ? s.missing[0].name + " bu dars ro'yxatida yo'q. " : s.missing.length + " ta faol talaba bu dars ro'yxatida yo'q. "),
@@ -663,6 +685,8 @@ async function studentView(id) {
   const show = painter(studentView, id);   // paints only while this is still the page
   const s = await api("GET", "/api/students/" + id);
   const nameInput = h("input", { name: "name", value: s.name, maxlength: "120", required: true });
+  // a column of dashes says nothing: grades and retake dates appear once there is one
+  const graded = s.history.some((r) => r.grade !== null), retook = s.history.some((r) => !r.present && r.retake_at);
   const stateOf = (r) => r.present ? h("span", { class: "muted", text: "Keldi" }) : r.retake_at ? chip("Topshirdi", "ok", "check") : chip("Qarz", "bad", "x");
 
   show(back("#/talabalar", "Talabalar"),
@@ -671,14 +695,15 @@ async function studentView(id) {
       s.graded ? tile("O'rtacha baho", fmtNum(s.average), "Jami ball: " + fmtNum(s.points)) : null),
     h("div", { class: "split" },
       h("div", {}, s.history.length ? h("div", { class: "card flush" }, h("table", {},
-        h("thead", {}, h("tr", {}, h("th", { scope: "col", text: "Sana" }), h("th", { scope: "col", text: "Para" }), h("th", { scope: "col", text: "Mavzu" }), h("th", { scope: "col", text: "Holat" }), h("th", { scope: "col", class: "num", text: "Baho" }), h("th", { scope: "col", text: "Qayta topshirish" }))),
+        h("thead", {}, h("tr", {}, h("th", { scope: "col", text: "Sana" }), h("th", { scope: "col", text: "Para" }), h("th", { scope: "col", text: "Mavzu" }), h("th", { scope: "col", text: "Holat" }),
+          graded ? h("th", { scope: "col", class: "num", text: "Baho" }) : null, retook ? h("th", { scope: "col", text: "Qayta topshirish" }) : null)),
         h("tbody", {}, s.history.map((r) => linkRow("#/dars/" + r.session_id, [
           h("td", { class: "nowrap" }, h("a", { class: "strong", href: "#/dars/" + r.session_id, text: dayText(r.date) })),
           h("td", { class: "nowrap muted", text: paraText(r.para) }),
           h("td", { class: "clip" + (r.topic ? "" : " muted"), text: r.topic || "Mavzu yozilmagan" }),
           h("td", {}, stateOf(r)),
-          h("td", { class: "num" + (r.grade === null ? " muted" : ""), text: r.grade === null ? "–" : fmtNum(r.grade) }),
-          h("td", { class: "nowrap muted", text: !r.present && r.retake_at ? retakeText(r) : "–" })])))))
+          graded ? h("td", { class: "num" + (r.grade === null ? " muted" : ""), text: r.grade === null ? "–" : fmtNum(r.grade) }) : null,
+          retook ? h("td", { class: "nowrap muted", text: !r.present && r.retake_at ? retakeText(r) : "–" }) : null].filter(Boolean))))))
         : h("p", { class: "card empty", text: "Hali darsda qatnashmagan." })),
       h("aside", { class: "rail sticky" },
         h("section", { class: "card", "aria-labelledby": "edit-h" }, h("h2", { id: "edit-h", text: "Tahrirlash" }),
@@ -706,19 +731,6 @@ async function retakesView() {
   // what is still owed reads oldest first: the longest-waiting debt is the one to settle
   if (rf.status === "owed") items.sort((a, b) => a.date.localeCompare(b.date) || a.para - b.para || a.name.localeCompare(b.name));
   const ageOf = (d) => Math.round((Date.parse(today()) - Date.parse(d)) / 864e5);
-
-  // master list: everyone with a missed lesson, the most owed first
-  const people = new Map();
-  for (const x of r.items) {
-    if (!people.has(x.student_id)) people.set(x.student_id, { id: x.student_id, name: x.name, owed: 0 });
-    if (!x.retake_at) people.get(x.student_id).owed++;
-  }
-  const pick = (idValue) => () => { rf.student = idValue; retakesView(); };
-  const master = h("aside", { class: "card flush master", "aria-label": "Talabalar" }, h("ul", { class: "plain" },
-    h("li", {}, h("button", { type: "button", class: "pick", "aria-pressed": String(!rf.student), onclick: pick("") }, h("span", { text: "Hamma talabalar" }), h("span", { class: "muted", text: String(r.owed) }))),
-    [...people.values()].sort((a, b) => b.owed - a.owed || a.name.localeCompare(b.name)).map((p) => h("li", {},
-      h("button", { type: "button", class: "pick", "aria-pressed": String(String(p.id) === String(rf.student)), onclick: pick(String(p.id)) },
-        h("span", { text: p.name }), p.owed ? h("span", { class: "badge", text: String(p.owed) }) : h("span", { class: "muted", text: "0" }))))));
 
   const accept = (x) => {
     const f = h("form", { class: "stack", onsubmit: async (e) => {
@@ -753,14 +765,19 @@ async function retakesView() {
           } }))
       : h("td", { class: "right" }, h("button", { type: "button", class: "small", text: "Qabul qilish", onclick: () => accept(x) }))));
 
+  const rowEls = items.map((x, i) => [plainName(x.name), rows[i]]);
   const shareBtn = h("button", { type: "button", text: "Talabalar uchun havola", onclick: () => shareSheet() });
   const headSub = h("p", { class: "week-sum" }, h("span", { text: COURSE.group }),
     h("span", { class: r.owed ? "neg" : "pos" }, h("b", { text: String(r.owed) }), " ta qolgan"),
     h("span", {}, h("b", { text: String(r.retaken) }), " ta topshirilgan"), h("span", {}, h("b", { text: String(r.missed) }), " ta qoldirilgan jami"));
-  show(pageHead("Qarzlar", headSub, shareBtn),
-    h("div", { class: "split left" }, master,
+  // search by name narrows the rows in place, without drawing the page again
+  const find = h("input", { type: "search", class: "toolbar-find", placeholder: "Talabani topish", "aria-label": "Talabani topish", autocomplete: "off", spellcheck: "false" });
+  const narrow = () => { const q = plainName(find.value); rowEls.forEach(([name, tr]) => { tr.hidden = !!q && !name.includes(q); }); };
+  find.addEventListener("input", narrow);
+  show(pageHead("Qarzlar", null, shareBtn),
+    h("div", { class: "stack" },
       h("div", { class: "stack" },
-        h("div", { class: "toolbar" }, h("div", { class: "seg-row", role: "group", "aria-label": "Holat" }, seg("owed", "Qolgan", r.owed), seg("done", "Topshirilgan", r.retaken), seg("all", "Hammasi", r.missed)),
+        h("div", { class: "toolbar" }, find, h("div", { class: "seg-row", role: "group", "aria-label": "Holat" }, seg("owed", "Qolgan", r.owed), seg("done", "Topshirilgan", r.retaken), seg("all", "Hammasi", r.missed)),
           current.older ? h("button", { type: "button", class: "seg older-toggle", "aria-pressed": String(rf.older), title: "Oldingi semestrlarning qarzlari ham", text: "Oldingi semestrlar (" + current.older + ")", onclick: () => { rf.older = !rf.older; retakesView(); } }) : null, daySel),
         rows.length ? h("div", { class: "card flush" }, h("table", {},
           h("thead", {}, h("tr", {}, h("th", { scope: "col", text: "Talaba" }), h("th", { scope: "col", text: "Dars" }), h("th", { scope: "col", text: "Mavzu" }), h("th", { scope: "col", class: "right", text: "Qayta topshirish" }))),
@@ -814,7 +831,7 @@ function state(text, iconName, cls) {
 
 // a card has the subject's colour: full when attendance is taken, a lighter shade otherwise
 function cardLines(subject, type, group, room, status) {   // room and status share the last line: a week should fit one screen
-  const meta = [type, group].filter(Boolean).join(" · ");
+  const meta = [group, type].filter(Boolean).join(" · ");   // the group first: on a narrow card it is what must survive
   // the timetable shows the short name on one line; the home page has the room for the whole name
   return [h("b", { title: subject }, h("span", { class: "name-full", text: subject }), h("span", { class: "name-short", text: shortSubject(subject) })), h("small", { text: meta, title: meta }),
     room || status ? h("span", { class: "slot-foot" }, room ? h("small", { text: room, title: room }) : null, status) : null];
@@ -1011,10 +1028,12 @@ function clashBadge(c) {
 function clashNotice(list, title) {
   const found = Timetable.clashes(list);
   if (!found.length) return null;
-  return h("section", { class: "card clash-notice", role: "alert", "aria-labelledby": "clash-h" },
-    h("h2", { id: "clash-h" }, icon("alert"), title || found.length + " ta ustma-ust dars"),
-    h("ul", { class: "plain" }, found.map((c) => h("li", {}, h("b", { text: clashWhen(c) }), h("span", { text: clashNames(c).join("  va  ") })))),
-    h("p", { class: "sub", text: "Bir vaqtda ikki guruhga kira olmaysiz. Jadvalni o'quv bo'limi bilan aniqlang; o'tilmaydigan darsni jadvalda «Dars bo'lmadi» deb belgilang." }));
+  const rule = "Bir vaqtda ikki guruhga kira olmaysiz. Jadvalni o'quv bo'limi bilan aniqlang; o'tilmaydigan darsni jadvalda «Dars bo'lmadi» deb belgilang.";
+  const one = (c) => [h("b", { text: clashWhen(c) }), " ", h("span", { text: clashNames(c).join(" va ") })];
+  return h("section", { class: "notice-line bad", role: "alert", title: rule },
+    icon("alert"),
+    found.length === 1 ? h("p", {}, h("b", { text: "Ustma-ust: " }), one(found[0]))
+      : h("details", {}, h("summary", {}, h("b", { text: title || found.length + " ta ustma-ust dars" })), h("ul", { class: "plain" }, found.map((c) => h("li", {}, one(c))))));
 }
 
 async function classContext() {   // the timetable as the other pages see it, for finding the next lesson of a class
@@ -1112,14 +1131,16 @@ function openPlan(e, after, sessions) {
 // the plans page: the current lesson day, the rest of the week folded, and each class against its topic list
 const PLAN_DAYS = 7;
 const rp = { day: null };   // the day picked in the week strip; null follows the next lesson day
-async function plansView() {
-  const show = painter(plansView, null);   // paints only while this is still the page
+async function topicsView() { return plansView("topics"); }
+async function plansView(mode) {
+  const topicsOnly = mode === "topics", self = topicsOnly ? topicsView : plansView;
+  const show = painter(self, null);   // paints only while this is still the page
   const [{ sessions }, { data }, { items: cancelledList }] = await Promise.all([api("GET", "/api/sessions"), api("GET", "/api/oxu"), api("GET", "/api/cancelled"), loadPlans()]);
   const t = today(), now = nowTime();
   const cancelled = new Set(cancelledList.map((c) => cancelKey(c.date, c.para, c.subject)));
   const ctx = lessonContext(sessions, data, cancelled);
   planCache.sessions = sessions;
-  const redraw = () => plansView();
+  const redraw = () => self(mode);
   const byTime = (a, b) => a.date.localeCompare(b.date) || a.para - b.para;
   const coming = entriesFor([...Array(PLAN_DAYS).keys()].map((i) => shiftDay(t, i)), ctx).filter((e) => !paraOver(e, t, now)).sort(byTime);
   // today while it still has lessons, else the next day that has them; a lesson that is over leaves
@@ -1256,15 +1277,17 @@ async function plansView() {
       h("span", { class: weekReady === coming.length ? "pos" : null }, h("b", { text: weekReady + " / " + coming.length }), " tayyor"));
   const dayHead = current.length ? h("h2", { id: "next-h", class: "section-title" }, capital(dayTitle(shown)),
     h("small", { class: "muted", text: current.length + " ta dars · " + (ready === current.length ? "hammasiga tayyor" : ready ? ready + " tasiga tayyor" : "hali tayyor emas") })) : null;
-  show(withAge(data, "lessons", "Shundan keyin o'tgan darslar holati noma'lum.", pageHead("Dars rejasi", headSub)),
-    clashNotice(coming, ""),
-    h("section", { "aria-labelledby": "next-h", class: "stack" }, strip, dayHead,
-      current.length ? dayTable(current) : h("p", { class: "card empty", text: "Keyingi " + PLAN_DAYS + " kunda dars yo'q. Jadval yangilansa, darslar shu yerda chiqadi." })),
-    h("section", { "aria-labelledby": "course-h", class: "stack" }, h("h2", { id: "course-h", class: "section-title", text: "Kurs rejasi" }),
+  const courseSection = h("section", { "aria-labelledby": "course-h", class: "stack" }, h("h2", { id: "course-h", class: "section-title", text: "Kurs rejasi" }),
       h("p", { class: "sub", text: "O'tilgan mavzular semestr ro'yxatiga qarab. «Orqada» taxminiy: bir dars kuni bir mavzu deb hisoblanadi." }),
       courseRows.length ? h("div", { class: "card flush" }, h("table", {}, h("tbody", {}, courseRows.filter(Boolean), withoutList.length ? h("tr", { class: "no-list" },
         h("td", { colspan: "4" }, h("div", { class: "no-list-row" }, h("span", { class: "muted", text: "Mavzular ro'yxati yo'q:" }),
-          withoutList.map((info) => h("button", { type: "button", class: "quiet", title: info.subject + ": mavzular ro'yxatini kiritish", onclick: () => editTopics(info) }, icon("plus"), info.name))))) : null))) : h("p", { class: "card empty", text: "Bu semestrda dars topilmadi." })));
+          withoutList.map((info) => h("button", { type: "button", class: "quiet", title: info.subject + ": mavzular ro'yxatini kiritish", onclick: () => editTopics(info) }, icon("plus"), info.name))))) : null))) : h("p", { class: "card empty", text: "Bu semestrda dars topilmadi." }));
+  if (topicsOnly) courseSection.querySelectorAll(":scope > h2, :scope > .sub").forEach((x) => x.remove());
+  if (topicsOnly) return show(withAge(data, "lessons", "Shundan keyin o'tgan darslar holati noma'lum.", pageHead("Mavzular", "O'tilgan mavzular semestr ro'yxatiga qarab. «Orqada» taxminiy: bir dars kuni bir mavzu deb hisoblanadi.")), courseSection);
+  show(withAge(data, "lessons", "Shundan keyin o'tgan darslar holati noma'lum.", pageHead("Dars rejasi", headSub)),
+    clashNotice(coming, ""),
+    h("section", { "aria-labelledby": "next-h", class: "stack" }, strip, dayHead,
+      current.length ? dayTable(current) : h("p", { class: "card empty", text: "Keyingi " + PLAN_DAYS + " kunda dars yo'q. Jadval yangilansa, darslar shu yerda chiqadi." })));
 }
 
 async function scheduleView() {
@@ -1313,8 +1336,6 @@ async function scheduleView() {
   const summary = h("p", { class: "week-sum" },
     h("span", {}, h("b", { text: String(count) }), " ta dars"), h("span", {}, h("b", { text: String(count * HOURS_PER_PARA) }), " soat"),
     h("span", {}, h("b", { text: String(held) }), " ta o'tildi"),
-    missingNow ? h("span", { class: "neg" }, h("b", { text: String(missingNow) }), " ta davomatsiz") : null,
-    clashCount ? h("span", { class: "neg" }, h("b", { text: String(clashCount) }), " ta ustma-ust") : null,
     unknownNow ? h("span", { class: "muted", title: "Sinxronlangandan keyin o'tgan darslar: davomati saytda olinganmi, noma'lum" }, h("b", { text: String(unknownNow) }), " ta noma'lum") : null);
   const dayTotal = (d) => { const n = entries.filter((e) => e.date === d).length; return h("td", { class: d === t ? "today" : null, text: n ? n + " dars · " + n * HOURS_PER_PARA + " soat" : "–" }); };
   const table = h("div", { class: "card flush" }, h("table", { class: "timetable" },
@@ -1357,7 +1378,7 @@ async function scheduleView() {
     h("ul", { class: "plain" }, weekCancelled.map((c) => h("li", {}, h("span", { text: shortDate(c.date) + ", " + c.para + "-para · " + c.subject }),
       h("button", { type: "button", class: "quiet", text: "Qaytarish", onclick: async () => { if (await act(() => api("PUT", "/api/cancelled", { date: c.date, para: c.para, subject: c.subject, cancelled: false }))) scheduleView(); } }))))) : null;
 
-  show(withAge(data, "unsaved", "Shundan keyin o'tgan darslar holati noma'lum.", pageHead("Dars jadvali", [range + (weekNo > 0 && monday <= Pace.semester(semester.start, semester.weeks, monday).end ? " · " + weekNo + "-hafta" : ""), summary],
+  show(withAge(data, "unsaved", "Shundan keyin o'tgan darslar holati noma'lum.", pageHead("Jadval", [range + (weekNo > 0 && monday <= Pace.semester(semester.start, semester.weeks, monday).end ? " · " + weekNo + "-hafta" : ""), summary],
       h("button", { type: "button", "aria-label": "Oldingi hafta", onclick: move(-1, "Oldingi hafta") }, icon("back")),
       h("button", { type: "button", text: "Bu hafta", disabled: jw.offset === 0, onclick: move(0, "Keyingi hafta") }),
       h("button", { type: "button", "aria-label": "Keyingi hafta", onclick: move(1, "Keyingi hafta") }, icon("forward")))),
@@ -1459,6 +1480,7 @@ async function loadView() {
   const kv = (label, value, cls) => h("div", { class: "kv" }, h("span", { text: label }), h("b", { class: cls || null }, value));
   const sum = (label, value, note) => h("div", { class: "pace-sum" }, h("span", { class: "label", text: label }), h("b", {}, value, h("small", { text: " soat" })), note ? h("span", { class: "note", text: note }) : null);
   const need = needPct(all);
+  const forecastP = h("p", { class: "forecast" });   // filled once the facts are worked out below
   const hero = h("section", { class: "card pace-hero", "aria-label": "Umumiy yuklama" },
     h("div", { class: "pace-lead" },
       h("b", { class: "pace-big" }, Pace.fmt1(all.pct), h("small", { text: "%" })),
@@ -1470,34 +1492,21 @@ async function loadView() {
       h("div", { class: "pace-legend" }, h("span", {}, h("i", { class: "k-done" }), "O'tildi " + pct1(all.pct)),
         sums.queued ? h("span", {}, h("i", { class: "k-soon" }), "Jadvalda " + hrs(sums.queued * HOURS_PER_PARA) + " soat") : null,
         need === null ? null : h("span", {}, h("i", { class: "k-need" }), "Bugun bo'lishi kerak " + est + pct1(need))),
-      h("div", { class: "pace-sums" },
-        sum("O'tildi", h1(all.held), sums.noAtt || sums.unknown ? "shundan " + [sums.noAtt ? hrs(sums.noAtt) + " soat davomatsiz" : "", sums.unknown ? hrs(sums.unknown) + " soat noma'lum" : ""].filter(Boolean).join(", ") : null),
-        sum("Qoldi", est + h1(all.left), sums.queued ? "shundan jadvalda " + hrs(sums.queued * HOURS_PER_PARA) + " soat" : null),
-        sum("Jami reja", est + h1(all.plan), null)),
-      h("p", { class: "pace-split muted" }, "Tizim " + hrs(site.done + site.noAtt) + " / " + hrs(site.plan) + " soat · Kurs, " + COURSE.group + " " + hrs(course.done) + " / " + est + hrs(course.plan) + " soat ", course.plan ? chip("Taxminiy") : null)));
+      forecastP));
 
-  // ---- by lesson type, and the time that is left
-  const typeCard = ({ type, sum: s, est: e }) => h("section", { class: "card type-card" },
-    h("h2", { text: type || "Boshqa" }),
-    h("b", { class: "stat-big" }, Pace.fmt1(s.pct), h("small", { text: "%" })),
-    paceBar(s.pct, needPct(s)),
-    kv("O'tildi", h1(s.held) + " / " + (e ? "~" : "") + h1(s.plan) + " soat"),
-    kv("Bugungacha kerak edi", s.expected === null ? "–" : (e ? "~" : "") + h1(s.expected) + " soat"),
-    kv("Farq", s.diff === null ? "–" : signed(s.diff) + " soat", verdictClass(s.diff).trim()));
-  const W = P.weekly, timeBar = paceBar(100 * frac, null, "time");
-  const restCard = h("section", { class: "card type-card" },
-    h("h2", { text: "Oxirigacha" }),
-    h("b", { class: "stat-big" }, String(P.daysLeft), h("small", { text: " ish kuni qoldi" })),
-    timeBar,
-    kv("Semestr", shortDate(semester.start) + " – " + shortDate(P.end) + ", " + P.weeks + " hafta"),
-    kv("Kerakli sur'at", W.required === null ? "–" : "haftasiga " + est + h1(W.required) + " soat"),
-    kv("Hozirgi sur'at", W.current === null ? "–" : "haftasiga " + h1(W.current) + " soat"));
+  // ---- by lesson type and the time left: one quiet row, the numbers that matter
+  const W = P.weekly;
+  const qfact = (label, value, note) => h("div", { class: "fact" }, h("span", { class: "fact-label", text: label }), h("b", { text: value }), note ? h("span", { class: "fact-note", text: note }) : null);
+  const typeRow = h("div", { class: "facts-strip auto" },
+    P.types.map(({ type, sum: x }) => qfact(type || "Boshqa", pct1(x.pct), x.diff === null ? null : (Math.abs(x.diff) < PARA_SLACK ? "rejada" : signed(x.diff) + " soat"))),
+    qfact("Oxirigacha", P.daysLeft + " ish kuni", W.required === null ? null : "haftasiga kerak " + est + h1(W.required) + " · hozir " + (W.current === null ? "–" : h1(W.current)) + " soat"));
 
   // ---- what follows from the numbers
   const facts = [];
+  let forecast = null;   // [kind, text]: what the current pace leads to, said once under the number
   if (W.projected !== null && all.plan && P.daysLeft > 0) {
     const short = all.plan - W.projected;
-    facts.push(short >= PARA_SLACK ? ["bad", "Shu sur'atda semestr oxirida " + est + h1(Math.min(all.plan, W.projected)) + " soat bo'ladi: " + est + h1(short) + " soat yetmaydi."]
+    forecast = (short >= PARA_SLACK ? ["bad", "Shu sur'atda semestr oxirida " + est + h1(Math.min(all.plan, W.projected)) + " soat bo'ladi: " + est + h1(short) + " soat yetmaydi."]
       : ["ok", "Shu sur'atda reja semestr oxirigacha to'liq bajariladi."]);
   }
   if (all.left > 0) {
@@ -1508,7 +1517,8 @@ async function loadView() {
   const worst = lines.filter((l) => !l.closed && l.plan).map((l) => [l, Pace.summary([l], frac).diff]).sort((x, y) => x[1] - y[1])[0];
   if (worst && worst[1] <= -PARA_SLACK) facts.push(["bad", "Eng ko'p orqada: " + worst[0].subject + ", " + worst[0].group + " (" + worst[0].type + "), " + signed(worst[1]) + " soat."]);
   if (sums.noAtt) facts.push(["warn", h("span", {}, hrs(sums.noAtt) + " soat davomatsiz: dars o'tilgan, lekin saytda davomat saqlanmagan. ", h("a", { href: "#/jadval", text: "Jadvalda ko'rish" }))]);
-  const factCard = facts.length ? h("section", { class: "card" }, h("h2", { text: "Bashorat" }),
+  if (forecast) { forecastP.textContent = forecast[1]; forecastP.classList.add(forecast[0]); }
+  const factCard = facts.length ? h("details", { class: "fold-line", "data-key": "load-more" }, h("summary", { text: "Batafsil" }),
     h("ul", { class: "plain facts" }, facts.map(([kind, text]) => h("li", { class: kind || null }, h("i", { class: "fact-dot" }), typeof text === "string" ? h("span", { text }) : text)))) : null;
 
   const extra = Object.entries(independent);
@@ -1516,8 +1526,7 @@ async function loadView() {
     h("p", { class: "sem-line" }, h("b", { text: P.day + "-ish kuni" }), " / " + P.days + " · " + (P.week ? P.week + "-hafta / " + P.weeks + " · " : "") + shortDate(semester.start) + " – " + shortDate(P.end) + " · ", h("a", { href: "#/kabinet", text: "o'zgartirish" })),
     !load.start ? h("p", { class: "sub" }, "To'liq hisob uchun ", h("a", { href: "#/kabinet", text: "Kabinetda qayta sinxronlang" }), ": o'tilgan soatlar butun semestr jadvalidan olinadi.") : null,
     hero,
-    h("div", { class: "type-cards" }, P.types.map(typeCard), restCard),
-    factCard,
+    typeRow,
     h("div", { class: "card flush" }, h("table", { class: "load" },
       h("thead", {}, h("tr", {}, h("th", { scope: "col", text: "Fan va guruh" }), h("th", { scope: "col", text: "Turi" }),
         [["Reja"], ["O'tilgan"], ["Davomatsiz"], sums.unknown ? ["Noma'lum", "Dars o'tgan, lekin sinxronlangandan keyin: davomati olinganmi, noma'lum"] : null, ["Qolgan"], ["Jadvalda", "Jadvalda bor, hali o'tilmagan darslar, soatda"]].filter(Boolean).map(([x, tip]) => h("th", { scope: "col", class: "num", title: tip || null, text: x })),
@@ -1525,6 +1534,7 @@ async function loadView() {
         h("th", { scope: "col", class: "num", title: "O'tilgan soat minus shu kungacha o'tilishi kerak bo'lgan soat. Tugagan va yopilgan guruhlarda ko'rsatilmaydi.", text: "Farq" }))),
       groups)),
     h("div", { class: "notes" },
+      factCard,
       extra.length ? h("p", {}, h("b", { text: "Mustaqil ta'lim: " + hrs(extra.reduce((n, [, v]) => n + v, 0)) + " soat" }), " (" + extra.map(([n, v]) => n + " " + hrs(v)).join(", ") + "). Jadvalga kirmaydi va hisobga qo'shilmagan.") : null,
       h("details", { class: "fold-line", "data-key": "how-load" }, h("summary", { text: "Qanday hisoblanadi?" }),
         h("dl", { class: "defs" }, [
@@ -1628,11 +1638,20 @@ async function cabinetView() {
         if (!(await ask("Saqlangan cookie o'chirilsinmi? Avtomatik sinxronlash to'xtaydi.", "O'chirish", true))) return;
         if (await act(() => api("DELETE", "/api/oxu/cookie"))) cabinetView();
       } })));
-  const head = pageHead("Kabinet", synced_at ? "digital.oxu.uz ma'lumotlari" : "Hali sinxronlanmagan");
-  const semesterCard = [await semesterForm(), backupCard(backup)];
-  if (!data) return show(head, form, semesterCard, h("p", { class: "card empty", text: "Jadval, yuklama va KPI o'z bo'limlarida ko'rinadi. Yuqorida birinchi sinxronlashni bajaring." }));
+  const head = pageHead("Sozlamalar", synced_at ? "digital.oxu.uz ma'lumotlari" : "Hali sinxronlanmagan");
+  const semesterCard = [await semesterForm(), backupCard(backup), themeCard(), h("section", { class: "card", "aria-labelledby": "acct-h" }, h("h2", { id: "acct-h", text: "Hisob" }), h("div", { class: "gap-top" }, h("a", { class: "button", href: "/logout", text: "Chiqish" })))];
+  if (!data) return show(head, h("div", { class: "settings" }, form, semesterCard, h("p", { class: "muted", text: "Jadval, yuklama va KPI o'z bo'limlarida ko'rinadi. Yuqorida birinchi sinxronlashni bajaring." })));
 
-  show(head, form, semesterCard);
+  show(head, h("div", { class: "settings" }, form, semesterCard));
+}
+// the colour theme: the saved choice, or following the system (theme.js keeps data-theme and the saved value)
+function themeCard() {
+  const box = h("div", { class: "seg-row", role: "group", "aria-label": "Mavzu" });
+  const paint = () => box.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.themeSet === themeChoice())));
+  for (const [v, text] of [["light", "Yorug'"], ["dark", "Qorong'i"], ["auto", "Tizimga qarab"]])
+    box.append(h("button", { type: "button", class: "seg", "data-theme-set": v, text, onclick: () => { setTheme(v); paintTheme(); paint(); } }));
+  paint();
+  return h("section", { class: "card", "aria-labelledby": "theme-h" }, h("h2", { id: "theme-h", text: "Ko'rinish" }), h("div", { class: "gap-top" }, box));
 }
 // when the database was last copied; a copy is made by `attendance backup` (see README), not by this page
 function backupCard(b) {
@@ -1761,9 +1780,11 @@ async function kpiView() {
     works.length ? h("ul", { class: "plain" }, works.map(workRow))
       : h("p", { class: "empty-line", text: "Hali ish qo'shilmagan. «Yangi ish» bilan boshlang: saytga yuklangunicha bo'lgan jarayonni shu yerda kuzatasiz." }));
   show(withAge(data, "kpi", "Saytdagi keyingi o'zgarishlar bu yerda ko'rinmaydi.", pageHead("Ilmiy KPI", "Ishlaringiz jarayoni va to'plangan ball", h("button", { type: "button", class: "primary", onclick: addWork }, icon("plus"), "Yangi ish"))),
-    // the works' own totals appear once there are works; until then two zeros only push the bands down
-    h("div", { class: "tiles" }, tile("To'plangan ball", score.toFixed(2)), works.length ? [tile("Jarayonda", active.length), tile("Yuklashga tayyor", ready.length)] : null, tile("Saytda tasdiqlangan", approved),
-      required.length ? tile("Minimal talablar", required.filter((b) => Number(b.count) >= Number(b.min)).length + " / " + required.length, "bajarilgan") : null),
+    // the lead: the score and what stands between it and the minimum, in one sentence
+    h("section", { class: "month-lead", "aria-label": "Ball" },
+      h("div", { class: "month-lead-top" }, h("b", { class: "month-big", text: score.toFixed(2) }),
+        h("div", {}, h("p", { class: "strong", text: required.length ? (required.every((b) => Number(b.count) >= Number(b.min)) ? "Minimal talablar bajarilgan" : required.filter((b) => Number(b.count) < Number(b.min)).length + " ta minimal talab bajarilmagan") : "To'plangan ball" }),
+          h("p", { class: "muted", text: [approved + " ta ish saytda tasdiqlangan", works.length ? active.length + " ta jarayonda" + (ready.length ? ", " + ready.length + " tasi yuklashga tayyor" : "") : null].filter(Boolean).join(" · ") })))),
     works.length ? worksCard : null,
     h("div", { class: "split" },
       h("div", { class: "card flush" }, h("table", {},
@@ -1774,7 +1795,7 @@ async function kpiView() {
           others.length ? h("ul", { class: "plain papers" }, others.map((p) => h("li", {},
             h("b", { text: p.title }), h("small", { text: p.band + " · " + p.date }), chip(p.status, /tasdiq/i.test(p.status) ? "ok" : /rad/i.test(p.status) ? "bad" : null, /tasdiq/i.test(p.status) ? "check" : null))))
             : h("p", { class: "muted small", text: "Saytdagi barcha ishlar yuqorida bog'langan." })))),
-    works.length ? null : worksCard);
+    works.length ? null : h("p", { class: "muted" }, "Hali ish qo'shilmagan. «Yangi ish» bilan boshlang: saytga yuklangunicha bo'lgan jarayonni shu yerda kuzatasiz."));
 }
 
 /* ------------------------------------------------------------ monthly KPI */
@@ -1930,24 +1951,22 @@ async function monthsView() {
   if (!items.length) return show(head, h("p", { class: "sub" }, "Bandlarni ko'rish uchun ", h("a", { href: "#/kabinet", text: "Kabinetda qayta sinxronlang" }), "."), history);
 
   const left = month === thisMonth ? ustamaOpen(data, marks, month, progress) : null;
-  const part = (cls, label, value) => h("span", {}, h("small", {}, cls ? h("i", { class: cls }) : null, label), h("b", { text: value }));
+  // the lead: the confirmed percentage once, and what is still open, in one sentence
+  const openLine = left && left.count ? left.count + " ta band ochiq · " + hrs(left.points) + " ball · oy tugashiga " + left.days + " kun"
+    : doable.length && doneCount === doable.length ? "Mening hamma bandlarim bajarilgan" : doable.length - doneCount + " ta band ochiq";
   show(head,
-    h("section", { class: "card hero-load", "aria-label": "Oy natijasi" },
-      h("div", { class: "hero-top" },
-        h("div", {}, h("span", { class: "label", text: periodTitle(month) + (onSite ? ": tasdiqlangan ustama" : ": kutilayotgan ustama") }), h("b", { class: "big", text: hrs(onSite ? approved : pending) + "%" })),
-        h("div", { class: "parts" },
-          part(null, "Mening bandlarim", doneCount + " / " + doable.length + (doable.length < mineItems.length ? " · " + (mineItems.length - doable.length) + " tasi bajarilmaydi" : "")),
-          onSite ? part("k-done", "Tasdiqlangan", hrs(approved) + "%") : null,
-          part("k-soft", "Kutilmoqda", "+" + hrs(pending) + "%"),
-          onSite ? part(null, "Hammasi tasdiqlansa", hrs(approved + pending) + "%") : part(null, "Sayt", "Ochilmagan"))),
-      h("span", { class: "bars tall", "aria-hidden": "true" }, fill, soft),
-      left && left.count ? h("p", { class: "sub", text: left.count + " ta band ochiq, " + hrs(left.points) + " ball. Oy tugashiga " + left.days + " kun qoldi." }) : null),
-    h("div", { class: "split" },
-      h("div", { class: "card flush" }, h("table", { class: "kpi-items" },
-        h("thead", {}, h("tr", {}, h("th", { scope: "col", class: "w-check", text: "Bajarildi" }), h("th", { scope: "col", text: "Ustama bandi" }), h("th", { scope: "col", text: "Holat" }), h("th", { scope: "col", class: "num", text: "Ball" }))),
-        h("tbody", {}, h("tr", { class: "group" }, h("th", { colspan: "4", scope: "colgroup", text: "Men bajaradigan bandlar" })), mineItems.map(earnRow)),
-        others.length ? h("tbody", {}, h("tr", { class: "group" }, h("th", { colspan: "4", scope: "colgroup", text: "Oy oxirida tasdiqlanadi" })), others.map(otherRow)) : null)),
-      h("aside", { class: "rail sticky" }, fines, history)));
+    h("section", { class: "month-lead", "aria-label": "Oy natijasi" },
+      h("div", { class: "month-lead-top" },
+        h("b", { class: "month-big", text: hrs(onSite ? approved : pending) + "%" }),
+        h("div", {}, h("p", { class: "strong", text: openLine }),
+          h("p", { class: "muted", text: (onSite ? "tasdiqlangan ustama" : "kutilayotgan ustama") + (onSite && pending ? " · +" + hrs(pending) + "% saytda kutilmoqda" : "") + (onSite && pending ? " · hammasi tasdiqlansa " + hrs(approved + pending) + "%" : "") }))),
+      h("span", { class: "bars tall", "aria-hidden": "true" }, fill, soft)),
+    h("div", { class: "card flush" }, h("table", { class: "kpi-items" },
+      h("thead", {}, h("tr", {}, h("th", { scope: "col", class: "w-check", text: "Bajarildi" }), h("th", { scope: "col", text: "Ustama bandi" }), h("th", { scope: "col", text: "Holat" }), h("th", { scope: "col", class: "num", text: "Ball" }))),
+      h("tbody", {}, h("tr", { class: "group" }, h("th", { colspan: "4", scope: "colgroup", text: "Men bajaradigan bandlar" })), mineItems.map(earnRow)),
+      others.length ? h("tbody", {}, h("tr", { class: "group" }, h("th", { colspan: "4", scope: "colgroup", text: "Oy oxirida tasdiqlanadi" })), others.map(otherRow)) : null)),
+    h("details", { class: "fold-line", "data-key": "months-more" }, h("summary", { text: "Jarimalar va oylar tarixi" }),
+      h("div", { class: "month-more" }, fines, history)));
 }
 
 /* ------------------------------------------------------------ notifications */
@@ -2145,60 +2164,23 @@ async function homeView() {
     entries.length ? h("ul", { class: "plain day-list", "aria-label": "Bugungi jadval" }, entries.map(lessonRow)) : null,
     dayFoot);
 
-  // ---- semester pace
-  const kv = (label, value, cls) => h("div", { class: "kv" }, h("span", { text: label }), h("b", { class: cls || null }, value));
-  const cardHead = (title, href) => h("h2", {}, href ? h("a", { class: "card-link", href }, title, icon("forward")) : title);
-  const ring = (pct, need) => {
-    const r = h("div", { class: "ring", role: "img", "aria-label": "Bajarildi " + pct1(pct) }, need === null ? null : h("i", { class: "ring-need" }), h("b", { text: pct1(pct) }));
-    r.style.setProperty("--v", Math.max(0, Math.min(100, pct || 0)));
-    if (need !== null) r.style.setProperty("--need", Math.max(0, Math.min(100, need)));
-    return r;
-  };
-  const paceCard = h("section", { class: "card stat-card" }, cardHead("Semestr sur'ati", "#/yuklama"),
-    !P ? h("p", { class: "stat-empty" }, "Yuklama hali sinxronlanmagan. ", h("a", { href: "#/kabinet", text: "Kabinet" }))
-      : [h("div", { class: "ring-row" }, ring(P.all.pct, needPct(P.all)),
-          h("div", {}, h("b", { class: "stat-big" }, h1(P.all.held), h("small", { text: " / " + P.est + h1(P.all.plan) + " soat" })),
-            P.all.diff === null ? null : h("p", { class: "stat-delta" + verdictClass(P.all.diff), text: verdictText(P.all.diff) }))),
-        P.all.expected === null ? null : kv("Bugungacha kerak edi", P.est + h1(P.all.expected) + " soat · " + pct1(needPct(P.all))),
-        P.types.map(({ type, sum, est }) => kv(type || "Boshqa", h1(sum.held) + " / " + (est ? "~" : "") + h1(sum.plan) + " · " + pct1(sum.pct)))]);
-
   // ---- this week, day by day
   const monday = shiftDay(t, -((dowOf(t) + 6) % 7));
   const week = [0, 1, 2, 3, 4, 5, 6].map((i) => shiftDay(monday, i)), weekEntries = entriesFor(week, ctx);
   const perDay = week.map((d) => { const list = weekEntries.filter((e) => e.date === d), held = list.filter((e) => paraOver(e, t, now)).length * HOURS_PER_PARA; return { d, held, soon: list.length * HOURS_PER_PARA - held }; })
     .filter((x, i) => i < 5 || x.held + x.soon);
   const weekHeld = perDay.reduce((n, x) => n + x.held, 0), weekAll = perDay.reduce((n, x) => n + x.held + x.soon, 0), top = Math.max(HOURS_PER_PARA, ...perDay.map((x) => x.held + x.soon));
-  const col = (x) => {
-    const a = h("i", { class: "held" }), b = h("i", { class: "soon" });
-    a.style.setProperty("--h", 100 * x.held / top); b.style.setProperty("--h", 100 * x.soon / top);
-    return h("li", { class: x.d === t ? "today" : null, title: capital(weekday(x.d)) + ": " + (x.held + x.soon) + " soat" }, h("small", { text: x.held + x.soon ? String(x.held + x.soon) : "" }), h("div", { class: "wk-bar" }, x.soon ? b : null, x.held ? a : null), h("span", { text: DAY_SHORT[dowOf(x.d)] }));
-  };
-  const weekCard = h("section", { class: "card stat-card" }, cardHead("Bu hafta", "#/jadval"),
-    !weekAll ? h("p", { class: "stat-empty", text: "Bu hafta jadvalda dars yo'q." })
-      : [h("b", { class: "stat-big" }, String(weekHeld), h("small", { text: " / " + weekAll + " soat o'tildi" })),
-        h("ul", { class: "plain wk", "aria-hidden": "true" }, perDay.map(col)),
-        P && P.weekly.required !== null ? kv("Kerakli sur'at", "haftasiga " + P.est + h1(P.weekly.required) + " soat") : null,
-        P && P.weekly.current !== null ? kv("Hozirgi sur'at", "haftasiga " + h1(P.weekly.current) + " soat") : null]);
-
   // ---- the course group's attendance
   const fin = sessions.filter((x) => x.finished_at && x.total > 0).sort((a, b) => b.date.localeCompare(a.date) || b.started_at - a.started_at);
   const rateOf = (list) => (list.length ? 100 * list.reduce((n, x) => n + x.came / x.total, 0) / list.length : null);
-  const weekAgo = shiftDay(t, -7), twoAgo = shiftDay(t, -14);
-  const recent = rateOf(fin.filter((x) => x.date > weekAgo)), before = rateOf(fin.filter((x) => x.date <= weekAgo && x.date > twoAgo));
-  const change = recent !== null && before !== null ? recent - before : null;
-  const attBar = paceBar(rateOf(fin), null);
-  const attCard = h("section", { class: "card stat-card" }, cardHead("Davomat · " + COURSE.group, "#/talabalar"),
-    !fin.length ? h("p", { class: "stat-empty", text: "Hali tugatilgan dars yo'q." })
-      : [h("b", { class: "stat-big" }, Pace.fmt1(rateOf(fin)), h("small", { text: "% o'rtacha" })),
-        change === null ? null : h("p", { class: "stat-delta" + (Math.abs(change) < .05 ? "" : change < 0 ? " neg" : " pos"), text: signed(change) + "% o'tgan haftaga nisbatan" }),
-        attBar,
-        kv("Oxirgi dars", fin[0].came + " / " + fin[0].total + " · " + (relDay(fin[0].date) || shortDate(fin[0].date))),
-        kv("Tugatilgan darslar", fin.length + " ta"),
-        kv("25% dan ko'p qoldirgan", atRisk ? atRisk + " ta talaba" : "yo'q", atRisk ? "neg" : null)]);
 
-  const monthDays = []; for (let d = t.slice(0, 8) + "01"; d <= t; d = shiftDay(d, 1)) monthDays.push(d);
-  const monthHours = entriesFor(monthDays, ctx).filter((e) => paraOver(e, t, now)).length * HOURS_PER_PARA;
-  const monthName = capital(MONTHS[Number(t.slice(5, 7)) - 1]);
+  // ---- the quiet line: four facts, each a link to its page. The full figures live there, not here.
+  const fact = (href, label, value, note) => h("a", { class: "fact", href }, h("span", { class: "fact-label", text: label }), h("b", { text: value }), note ? h("span", { class: "fact-note", text: note }) : null);
+  const facts = h("nav", { class: "facts-strip", "aria-label": "Qisqacha" },
+    fact("#/yuklama", "Semestr", P ? pct1(P.all.pct) : "–", P && P.all.expected !== null ? "kerak ~" + pct1(needPct(P.all)) : null),
+    fact("#/jadval", "Bu hafta", weekAll ? weekHeld + " / " + weekAll + " soat" : "–", weekAll ? "o'tildi" : "dars yo'q"),
+    fact("#/guruh", "Davomat · " + COURSE.group, fin.length ? pct1(rateOf(fin)) : "–", fin.length ? fin.length + " ta dars" : null),
+    fact("#/ustama", "Ustama", bonusNow.known ? hrs(bonusNow.value) + "%" : "–", bonus.count ? bonus.count + " ta band ochiq" : null));
   const S = Pace.semester(semester.start, semester.weeks, t);
   const semMark = h("div", { class: "sem-mark" }, h("p", {}, h("b", { text: S.week ? S.week + "-hafta" : "Semestr boshlanmagan" }),
       S.week ? " / " + S.weeks + " · " + S.day + "-ish kuni / " + S.total + " · " + S.left + " kun qoldi" : ""),
@@ -2206,33 +2188,23 @@ async function homeView() {
   show(withAge(data, "unsaved", "Shundan keyin o'tgan darslar holati noma'lum.", pageHead("Bugun", capital(longDay(t)), semMark)),
     h("div", { class: "lead" },
       todayCard,
-      h("section", { class: "card attention", "aria-labelledby": "todo-h" }, h("h2", { id: "todo-h" }, "E'tibor talab qiladi", tasks.length ? h("span", { class: "badge" + (urgent.length ? "" : " calm"), text: String(urgent.length || tasks.length) }) : null),
+      h("section", { class: "card attention", "aria-labelledby": "todo-h" }, h("h2", { id: "todo-h" }, "Navbat", tasks.length ? h("span", { class: "badge" + (urgent.length ? "" : " calm"), text: String(urgent.length || tasks.length) }) : null),
         !tasks.length ? h("p", { class: "all-clear" }, icon("check"), "Hammasi joyida")
           : [urgent.length ? taskList(urgent) : null, later.length ? [urgent.length ? h("p", { class: "group-label", text: "Keyinroq" }) : null, taskList(later)] : null])),
-    h("div", { class: "home-stats" }, paceCard, weekCard, attCard),
-    h("div", { class: "tiles" },
-      stat("#/ustama", "Ustama, " + monthName.toLowerCase(), bonusNow.known ? hrs(bonusNow.value) + "%" : "–", bonusNow.known ? (bonusNow.onSite ? "saytda tasdiqlangan" : "belgilangan bandlardan") + (bonus.count ? " · " + bonus.count + " ta ochiq" : "") : "Sinxronlanmagan"),
-      stat("#/ilmiy-kpi", "Ilmiy ball", score.toFixed(2), works.length ? works.length + " ta ish kuzatuvda" : null),
-      stat("#/yuklama", monthName + "da o'tildi", hrs(monthHours) + " soat", P ? "semestrda " + h1(P.all.held) + " soat" : null),
-      stat("#/jadval", "Olinmagan davomat", todo + gaps, [todo ? COURSE.group + ": " + todo : null, gaps ? "saytda: " + gaps : null, unknownSite ? unknownSite + " ta noma'lum" : null].filter(Boolean).join(" · ") || "hammasi olingan")));
+    facts);
 }
 
 /* ------------------------------------------------------------ theme */
 function paintTheme() {
-  const now = document.documentElement.dataset.theme || "auto";
+  const now = themeChoice();
   document.querySelectorAll("[data-theme-set]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.themeSet === now)));
 }
-document.querySelectorAll("[data-theme-set]").forEach((b) => b.addEventListener("click", () => {
-  const v = b.dataset.themeSet;
-  if (v === "auto") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = v;
-  try { if (v === "auto") localStorage.removeItem("theme"); else localStorage.setItem("theme", v); } catch (err) { /* this visit only */ }
-  paintTheme();
-}));
+document.querySelectorAll("[data-theme-set]").forEach((b) => b.addEventListener("click", () => { setTheme(b.dataset.themeSet); paintTheme(); }));
 paintTheme();
 
 /* ------------------------------------------------------------ search and keyboard */
 const palette = document.getElementById("palette"), paletteInput = document.getElementById("palette-input"), paletteList = document.getElementById("palette-list");
-const PALETTE_PAGES = [["#/", "Bosh sahifa"], ["#/jadval", "Dars jadvali"], ["#/reja", "Dars rejasi"], ["#/yuklama", "Yuklama"], ["#/ilmiy-kpi", "Ilmiy KPI"], ["#/ustama", "Ustama"], ["#/darslar", "Darslar"], ["#/talabalar", "Talabalar"], ["#/qarzlar", "Qarzlar"], ["#/bildirishnomalar", "Bildirishnomalar"], ["#/kabinet", "Kabinet"]];
+const PALETTE_PAGES = [["#/", "Bugun"], ["#/jadval", "Jadval · setka"], ["#/reja", "Jadval · ro'yxat va reja"], ["#/yuklama", "Yuklama"], ["#/ustama", "Ustama"], ["#/ilmiy-kpi", "Ilmiy KPI"], ["#/guruh", COURSE.group + " · darslar"], ["#/guruh/talabalar", COURSE.group + " · talabalar"], ["#/guruh/qarzlar", COURSE.group + " · qarzlar"], ["#/guruh/mavzular", COURSE.group + " · mavzular"], ["#/sozlamalar", "Sozlamalar"], ["#/bildirishnomalar", "Bildirishnomalar"]];
 let paletteItems = [], paletteAt = 0;
 function renderPalette() {
   const q = paletteInput.value.trim().toLowerCase();
@@ -2251,8 +2223,9 @@ async function openPalette() {
 }
 // the two things done most often, without leaving the keyboard: take attendance of the lesson that is
 // on (or next today), and read the site now
+const THEME_ACTIONS = [["light", "Mavzu: yorug'"], ["dark", "Mavzu: qorong'i"], ["auto", "Mavzu: tizimga qarab"]].map(([v, text]) => ({ text, kind: "Amal", run: () => { setTheme(v); paintTheme(); } }));
 async function paletteActions() {
-  const out = [{ text: "Hozir sinxronlash", kind: "Amal", run: async () => {
+  const out = [...THEME_ACTIONS, { text: "Chiqish", kind: "Amal", run: () => { location.href = "/logout"; } }, { text: "Hozir sinxronlash", kind: "Amal", run: async () => {
     say("Sinxronlanmoqda…", true, true);
     const res = await act(() => api("POST", "/api/oxu/sync", {}));
     if (res) { say(res.warnings.length ? "Qisman yangilandi. " + res.warnings.join("; ") : "Ma'lumotlar yangilandi", !res.warnings.length); route(); refreshBadge(); }
