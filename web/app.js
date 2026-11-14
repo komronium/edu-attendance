@@ -1097,6 +1097,7 @@ function openPlan(e, after, sessions) {
 
 // the plans page: the current lesson day, the rest of the week folded, and each class against its topic list
 const PLAN_DAYS = 7;
+const rp = { day: null };   // the day picked in the week strip; null follows the next lesson day
 async function plansView() {
   const show = painter(plansView, null);   // paints only while this is still the page
   const [{ sessions }, { data }, { items: cancelledList }] = await Promise.all([api("GET", "/api/sessions"), api("GET", "/api/oxu"), api("GET", "/api/cancelled"), loadPlans()]);
@@ -1109,8 +1110,12 @@ async function plansView() {
   const coming = entriesFor([...Array(PLAN_DAYS).keys()].map((i) => shiftDay(t, i)), ctx).filter((e) => !paraOver(e, t, now)).sort(byTime);
   // today while it still has lessons, else the next day that has them; a lesson that is over leaves
   const lead = coming.length ? coming[0].date : null;
-  const current = coming.filter((e) => e.date === lead), later = coming.filter((e) => e.date !== lead);
-  const ready = current.filter((e) => planStage(planOf(e)) === "ready").length;
+  const lessonDays = [...new Set(coming.map((e) => e.date))];
+  if (rp.day && !lessonDays.includes(rp.day)) rp.day = null;
+  const shown = rp.day || lead;
+  const current = coming.filter((e) => e.date === shown);
+  const readyOf = (list) => list.filter((e) => planStage(planOf(e)) === "ready").length;
+  const ready = readyOf(current);
 
   const dayTitle = (d) => (relDay(d) ? capital(relDay(d)) + ", " : d === shiftDay(t, 1) ? "Ertaga, " : "") + longDay(d);
 
@@ -1135,25 +1140,40 @@ async function plansView() {
 
   const colorOf = subjectColors(data);
   const clashAt = clashMap(coming);
+  // the syllabus's next topic is offered once per class: on its first lesson still without a plan
+  const offered = new Set(), offer = new Map();
+  for (const e of coming) {
+    const info = entryInfo(e), k = info.subject + "|" + info.group;
+    if (offered.has(k) || planOf(e)) { offered.add(k); continue; }
+    offered.add(k);
+    const idea = suggestTopic(info, sessions);
+    if (idea) offer.set(e.date + "|" + e.para + "|" + k, idea);
+  }
+  const acceptTopic = async (e, topic) => {
+    if (await act(() => savePlan(e, { topic, items: [], ready: false, outcome: "" }))) { say("Mavzu: " + topic, true); await loadPlans(); redraw(); }
+  };
+  // ↑/↓ walk the lessons, Enter opens one: the week can be planned without the mouse
+  const walk = (ev) => {
+    const rows = [...document.querySelectorAll("table.plans tr.tap")], i = rows.indexOf(ev.currentTarget);
+    if (ev.key === "ArrowDown" || ev.key === "ArrowUp") { ev.preventDefault(); const to = rows[i + (ev.key === "ArrowDown" ? 1 : -1)]; if (to) to.focus(); }
+  };
   const row = (e, action) => {
     const p = planOf(e), info = entryInfo(e), n = p ? p.items.length : 0, clash = clashAt.get(Timetable.clashKey(e));
     const open = () => openPlan(e, redraw, sessions);
-    return h("tr", { class: "tap" + (clash ? " clash" : ""), onclick: (ev) => { if (!ev.target.closest("button")) open(); } },
+    const idea = !p ? offer.get(e.date + "|" + e.para + "|" + info.subject + "|" + info.group) : "";
+    const topicCell = p && p.topic ? [p.topic, n ? h("small", { class: "muted", text: n + " ta band" }) : null]
+      : idea ? h("button", { type: "button", class: "quiet suggest", title: "Kurs rejasi bo'yicha keyingi mavzu. Bosing: mavzu sifatida yoziladi", onclick: () => acceptTopic(e, idea) }, icon("plus"), h("span", { class: "muted", text: "Keyingi mavzu: " }), h("b", { text: idea }))
+      : null;
+    const status = !p ? h("button", { type: "button", class: "quiet plan-go", onclick: open }, icon("plan"), "Rejalash") : h("button", { type: "button", class: "quiet", onclick: open }, planChip(p));
+    return h("tr", { class: "tap" + (clash ? " clash" : ""), tabindex: "0", "aria-label": e.para + "-para, " + info.name + (info.group ? ", " + info.group : "") + ": " + STAGES[planStage(p)],
+      onkeydown: (ev) => { if (ev.target !== ev.currentTarget) return; if (ev.key === "Enter") { ev.preventDefault(); open(); } else walk(ev); },
+      onclick: (ev) => { if (!ev.target.closest("button")) open(); } },
       h("td", { class: "nowrap strong para" }, e.para + "-para", PARA_TIMES[e.para] ? h("small", { class: "muted", text: PARA_TIMES[e.para][0] + "–" + PARA_TIMES[e.para][1] }) : null),
       h("td", { class: "lesson" }, h("span", { class: "key " + colorOf(info.name) }, h("i"), info.name, clash ? clashBadge(clash) : null),
         h("small", {}, ordinal(e), info.group ? h("span", { class: "muted", text: info.group }) : null)),
-      h("td", { class: "topic" + (p && p.topic ? "" : " muted") }, p && p.topic ? p.topic : "Mavzu yozilmagan",
-        n ? h("small", { class: "muted", text: n + " ta band" }) : null),
-      h("td", { class: "right nowrap" }, action || h("button", { type: "button", class: "quiet", onclick: open }, planChip(p))));
+      h("td", { class: "topic" }, topicCell),
+      h("td", { class: "right nowrap" }, action || status));
   };
-  // one heading per day, the lessons under it in para order
-  const table = (list) => {
-    const days = [...new Set(list.map((x) => x.date))];
-    return h("div", { class: "card flush" }, h("table", { class: "plans" }, days.map((d) => h("tbody", {},
-      h("tr", { class: "group" + (d === t ? " today" : "") }, h("th", { colspan: "4", scope: "colgroup" }, h("span", { text: dayTitle(d) }), h("small", { text: list.filter((x) => x.date === d).length + " ta dars" }))),
-      list.filter((x) => x.date === d).sort((a, b) => a.para - b.para).map((x) => x.row)))));
-  };
-
   // every class taught this semester, with how far its topic list has got
   const days = [];
   for (let d = start; d <= t && days.length < 200; d = shiftDay(d, 1)) days.push(d);
@@ -1182,8 +1202,10 @@ async function plansView() {
     if (!bySubject.has(c.info.subject)) bySubject.set(c.info.subject, []);
     bySubject.get(c.info.subject).push(c);
   }
+  const withoutList = [];
   const courseRows = [...bySubject.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([subject, group]) => {
     const list = planCache.topics[subject] || [];
+    if (!list.length) { withoutList.push(group[0].info); return null; }
     const shown = group.map((c) => ({ ...c, name: c.info.group.replace(/_yopildi.*/i, "") }));
     // each group's lag; the subject row shows the one furthest behind and says which it is
     const lag = shown.map((c) => {
@@ -1204,15 +1226,31 @@ async function plansView() {
   });
 
   const asRows = (list) => list.map((e) => ({ date: e.date, para: e.para, row: row(e) }));
-  const leadTitle = !lead ? "Kelgusi darslar" : lead === t ? "Bugungi darslar" : lead === shiftDay(t, 1) ? "Ertangi darslar" : capital(weekday(lead)) + "dagi darslar";
-  show(withAge(data, "lessons", "Shundan keyin o'tgan darslar holati noma'lum.", pageHead("Dars rejasi", !current.length ? "Keyingi " + PLAN_DAYS + " kunda dars yo'q" : capital(dayTitle(lead)) + " · " + current.length + " ta dars" + (ready === current.length ? ", hammasiga tayyor" : ready ? ", " + ready + " tasiga tayyor" : ", hali tayyor emas"))),
+  const dayTable = (list) => h("div", { class: "card flush" }, h("table", { class: "plans" }, h("tbody", {}, asRows(list).sort((a, b) => a.para - b.para).map((x) => x.row))));
+  // the week as a strip of days: how many lessons, how many ready, a clash; the picked day opens below
+  const strip = lessonDays.length > 1 ? h("div", { class: "day-strip", role: "group", "aria-label": "Kunlar" }, lessonDays.map((d) => {
+    const list = coming.filter((e) => e.date === d), r = readyOf(list), clash = Timetable.clashes(list).length;
+    const pick = () => { rp.day = d === lead ? null : d; plansView(); };
+    return h("button", { type: "button", class: "day-pick" + (clash ? " clash" : r === list.length ? " done" : ""), title: clash ? clash + " ta ustma-ust dars" : null, "aria-pressed": String(d === shown), onclick: pick },
+      h("b", { text: (relDay(d) ? capital(relDay(d)) : capital(weekday(d))) }),
+      h("small", { text: shortDate(d) }),
+      h("span", { class: "day-pick-n" }, clash ? icon("alert") : r === list.length ? icon("check") : null, r + " / " + list.length + " tayyor"));
+  })) : null;
+  const weekReady = readyOf(coming);
+  const headSub = !coming.length ? "Keyingi " + PLAN_DAYS + " kunda dars yo'q"
+    : h("p", { class: "week-sum" }, h("span", {}, h("b", { text: String(coming.length) }), " ta dars, " + PLAN_DAYS + " kunda"),
+      h("span", { class: weekReady === coming.length ? "pos" : null }, h("b", { text: weekReady + " / " + coming.length }), " tayyor"));
+  const dayHead = current.length ? h("h2", { id: "next-h", class: "section-title" }, capital(dayTitle(shown)),
+    h("small", { class: "muted", text: current.length + " ta dars · " + (ready === current.length ? "hammasiga tayyor" : ready ? ready + " tasiga tayyor" : "hali tayyor emas") })) : null;
+  show(withAge(data, "lessons", "Shundan keyin o'tgan darslar holati noma'lum.", pageHead("Dars rejasi", headSub)),
     clashNotice(coming, ""),
-    h("section", { "aria-labelledby": "next-h", class: "stack" }, h("h2", { id: "next-h", class: "section-title", text: leadTitle }),
-      current.length ? table(asRows(current)) : h("p", { class: "card empty", text: "Keyingi " + PLAN_DAYS + " kunda dars yo'q." })),
-    later.length ? h("details", { class: "fold-line later-days" }, h("summary", { text: "Keyingi kunlar: " + later.length + " ta dars" }), table(asRows(later))) : null,
+    h("section", { "aria-labelledby": "next-h", class: "stack" }, strip, dayHead,
+      current.length ? dayTable(current) : h("p", { class: "card empty", text: "Keyingi " + PLAN_DAYS + " kunda dars yo'q. Jadval yangilansa, darslar shu yerda chiqadi." })),
     h("section", { "aria-labelledby": "course-h", class: "stack" }, h("h2", { id: "course-h", class: "section-title", text: "Kurs rejasi" }),
       h("p", { class: "sub", text: "O'tilgan mavzular semestr ro'yxatiga qarab. «Orqada» taxminiy: bir dars kuni bir mavzu deb hisoblanadi." }),
-      courseRows.length ? h("div", { class: "card flush" }, h("table", {}, h("tbody", {}, courseRows))) : h("p", { class: "card empty", text: "Bu semestrda dars topilmadi." })));
+      courseRows.length ? h("div", { class: "card flush" }, h("table", {}, h("tbody", {}, courseRows.filter(Boolean), withoutList.length ? h("tr", { class: "no-list" },
+        h("td", { colspan: "4" }, h("div", { class: "no-list-row" }, h("span", { class: "muted", text: "Mavzular ro'yxati yo'q:" }),
+          withoutList.map((info) => h("button", { type: "button", class: "quiet", title: info.subject + ": mavzular ro'yxatini kiritish", onclick: () => editTopics(info) }, icon("plus"), info.name))))) : null))) : h("p", { class: "card empty", text: "Bu semestrda dars topilmadi." })));
 }
 
 async function scheduleView() {

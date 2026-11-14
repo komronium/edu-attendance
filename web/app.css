@@ -304,6 +304,7 @@ a.person { display: inline-block; min-width: 11rem; }
 .week-sum span { color: var(--muted); }
 .week-sum b { color: var(--text); font-weight: 600; }
 .week-sum .neg, .week-sum .neg b { color: var(--bad); }
+.week-sum .pos, .week-sum .pos b { color: var(--ok); }
 .page-head .sub:has(.week-sum) { display: flex; flex-wrap: wrap; gap: var(--s4); }
 .timetable tr.quiet th span { font-weight: 500; }
 .now-line { position: absolute; z-index: 2; left: 0; right: 0; top: calc(var(--p, 0) * 1%); height: 2px; background: var(--bad); pointer-events: none; }
@@ -865,9 +866,33 @@ body.login { display: grid; place-items: center; min-height: 100vh; padding: var
 .clash-badge .icon { width: 12px; height: 12px; stroke-width: 2.5; }
 .timetable td.clash { box-shadow: inset 0 0 0 2px var(--bad); background: var(--bad-soft); }
 .timetable td.clash > .clash-badge { margin-bottom: var(--s1); }
-.plans tr.clash td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
+.plans tr.clash { background: color-mix(in srgb, var(--bad-soft) 55%, transparent); }
 .plans td.lesson .clash-badge { margin-left: var(--s2); }
 .day-row.clash .day-time b { color: var(--bad); }
 .day-time .clash-badge { margin-top: 2px; }
 /* several lessons in one cell share it: each takes its own height instead of the whole cell's */
 .timetable td.clash .slot, .timetable td.clash .slot-wrap { height: auto; min-height: 0; }
+
+/* ------------------------------------------------------------ plans: the week strip, actions in rows */
+.day-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: var(--s2); }
+.day-pick { display: grid; justify-content: stretch; justify-items: start; gap: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); color: var(--text); font-weight: 400; text-align: left; }
+.day-pick b { font-size: var(--t-sm); font-weight: 600; }
+.day-pick small { color: var(--muted); font-size: var(--t-xs); }
+.day-pick-n { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; color: var(--muted); font-size: var(--t-xs); font-weight: 600; font-variant-numeric: tabular-nums; }
+.day-pick-n .icon { width: 12px; height: 12px; stroke-width: 2.5; }
+.day-pick.done .day-pick-n { color: var(--ok); }
+.day-pick.clash .day-pick-n { color: var(--bad); }
+.day-pick:hover { border-color: var(--line-strong); background: var(--surface); }
+.day-pick[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: var(--accent-soft); }
+.day-pick[aria-pressed="true"] b { color: var(--accent); }
+.section-title small { margin-left: var(--s2); font-size: var(--t-sm); font-weight: 500; }
+.plans tr.tap:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.plans .suggest { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 4px 10px 4px 8px; border: 1px dashed var(--line-strong); font-size: var(--t-sm); font-weight: 400; text-align: left; white-space: normal; }
+.plans .suggest b { font-weight: 600; color: var(--text); }
+.plans .suggest .icon { flex: none; width: 14px; height: 14px; color: var(--accent); }
+.plans .suggest:hover { border-color: var(--accent); background: var(--accent-soft); }
+.plans .plan-go { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); font-size: var(--t-sm); font-weight: 600; }
+.plans .plan-go .icon { width: 15px; height: 15px; }
+.no-list-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
+tr.no-list button { display: inline-flex; align-items: center; gap: 4px; font-size: var(--t-sm); }
+tr.no-list button .icon { width: 13px; height: 13px; }
