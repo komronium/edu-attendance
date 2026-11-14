@@ -1497,8 +1497,14 @@ async function loadView() {
   // ---- by lesson type and the time left: one quiet row, the numbers that matter
   const W = P.weekly;
   const qfact = (label, value, note) => h("div", { class: "fact" }, h("span", { class: "fact-label", text: label }), h("b", { text: value }), note ? h("span", { class: "fact-note", text: note }) : null);
-  const typeRow = h("div", { class: "facts-strip auto" },
-    P.types.map(({ type, sum: x }) => qfact(type || "Boshqa", pct1(x.pct), x.diff === null ? null : (Math.abs(x.diff) < PARA_SLACK ? "rejada" : signed(x.diff) + " soat"))),
+  // the hours themselves lead: how much is taught of the plan, and how much is left, in total and by lesson type
+  const totalsRow = h("div", { class: "facts-strip auto big" },
+    qfact("Jami o'tildi", h1(all.held) + " soat", "reja " + est + h1(all.plan) + " soat" + (sums.noAtt || sums.unknown ? " · shundan " + [sums.noAtt ? hrs(sums.noAtt) + " davomatsiz" : "", sums.unknown ? hrs(sums.unknown) + " noma'lum" : ""].filter(Boolean).join(", ") : "")),
+    qfact("Qoldi", est + h1(all.left) + " soat", sums.queued ? "shundan jadvalda " + hrs(sums.queued * HOURS_PER_PARA) + " soat" : "jadvalda hali yo'q"),
+    all.expected === null ? null : qfact("Bugungacha kerak edi", est + h1(all.expected) + " soat", pct1(needPct(all)) + " · " + h1(all.held) + " soat o'tildi"));
+  const typeRow = h("div", { class: "facts-strip auto big" },
+    P.types.map(({ type, sum: x, est: e }) => qfact(type || "Boshqa", h1(x.held) + " / " + (e ? "~" : "") + h1(x.plan) + " soat",
+      pct1(x.pct) + (x.diff === null ? "" : " · " + (Math.abs(x.diff) < PARA_SLACK ? "rejada" : signed(x.diff) + " soat")))),
     qfact("Oxirigacha", P.daysLeft + " ish kuni", W.required === null ? null : "haftasiga kerak " + est + h1(W.required) + " · hozir " + (W.current === null ? "–" : h1(W.current)) + " soat"));
 
   // ---- what follows from the numbers
@@ -1526,6 +1532,7 @@ async function loadView() {
     h("p", { class: "sem-line" }, h("b", { text: P.day + "-ish kuni" }), " / " + P.days + " · " + (P.week ? P.week + "-hafta / " + P.weeks + " · " : "") + shortDate(semester.start) + " – " + shortDate(P.end) + " · ", h("a", { href: "#/kabinet", text: "o'zgartirish" })),
     !load.start ? h("p", { class: "sub" }, "To'liq hisob uchun ", h("a", { href: "#/kabinet", text: "Kabinetda qayta sinxronlang" }), ": o'tilgan soatlar butun semestr jadvalidan olinadi.") : null,
     hero,
+    totalsRow,
     typeRow,
     h("div", { class: "card flush" }, h("table", { class: "load" },
       h("thead", {}, h("tr", {}, h("th", { scope: "col", text: "Fan va guruh" }), h("th", { scope: "col", text: "Turi" }),
