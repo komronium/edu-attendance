@@ -341,7 +341,7 @@ async function lessonsView() {
   const sessions = allSessions.filter((s) => inSemesterNow(s.date)), older = allSessions.filter((s) => !inSemesterNow(s.date));
   const debts = thisSemester(allDebts);
   const start = async (date, para) => {
-    const topic = (planCache.plans.get(planKey(date, COURSE.slotOf[para] || para)) || {}).topic || "";
+    const topic = (planCache.plans.get(planKey(date, COURSE.slotOf[para] || para, COURSE.subject, COURSE.group)) || {}).topic || "";
     const res = await act(() => api("POST", "/api/sessions", { date, para, room: COURSE.room, topic }));
     if (res) location.hash = "#/dars/" + res.id;
   };
@@ -964,16 +964,16 @@ function nextBand(e, t, now, action) {
 
 /* ------------------------------------------------------------ lesson plans */
 // The teacher's own preparation for each lesson: a topic, a few points, and whether they are ready.
-// A teacher gives one lesson per para, so date + timetable para name the lesson, for site lessons too.
+// Date, timetable para, subject and group name the lesson: two lessons on one para keep a plan each.
 const planCache = { plans: new Map(), topics: {}, sessions: [] };
-const planKey = (date, para) => date + "|" + Number(para);
+const planKey = (date, para, subject, group) => date + "|" + Number(para) + "|" + subject + "|" + (group || "");
 async function loadPlans() {
   const { plans, topics } = await api("GET", "/api/plans");
-  planCache.plans = new Map(plans.map((p) => [planKey(p.date, p.para), p]));
+  planCache.plans = new Map(plans.map((p) => [planKey(p.date, p.para, p.subject, p.group), p]));
   planCache.topics = topics;
   return planCache;
 }
-const planOf = (e) => planCache.plans.get(planKey(e.date, e.para)) || null;
+const planOf = (e) => { const i = entryInfo(e); return planCache.plans.get(planKey(e.date, e.para, i.subject, i.group)) || null; };
 const STAGES = { none: "Reja yo'q", planned: "Reja bor", ready: "Tayyor" };
 const OUTCOMES = { done: "O'tildi", partial: "Qisman o'tildi", moved: "Keyingi darsga qoldi" };
 function planState(p) {
@@ -983,6 +983,24 @@ function planState(p) {
 function planChip(p) {
   const st = planStage(p);
   return chip(STAGES[st], st === "ready" ? "ok" : st === "planned" ? "live" : null, st === "ready" ? "check" : null);
+}
+
+/* ------------------------------------------------------------ clashes */
+// Two lessons on one para cannot both be taught: the timetable has to change, so it is shown loudly.
+const clashMap = (list) => new Map(Timetable.clashes(list).flatMap((c) => c.entries.map((e) => [Timetable.clashKey(e), c])));
+const clashNames = (c) => c.entries.map((e) => { const i = entryInfo(e); return [i.name, i.type, i.group].filter(Boolean).join(" · "); });
+const clashWhen = (c) => capital(longDay(c.date)) + ", " + c.para + "-para" + (PARA_TIMES[c.para] ? " (" + PARA_TIMES[c.para].join("–") + ")" : "");
+function clashBadge(c) {
+  return h("span", { class: "clash-badge", title: "Bir vaqtda " + c.entries.length + " ta dars: " + clashNames(c).join(" va ") }, icon("alert"), "Ustma-ust");
+}
+// the clashes among the given entries, each one spelled out; null when there are none
+function clashNotice(list, title) {
+  const found = Timetable.clashes(list);
+  if (!found.length) return null;
+  return h("section", { class: "card clash-notice", role: "alert", "aria-labelledby": "clash-h" },
+    h("h2", { id: "clash-h" }, icon("alert"), title || found.length + " ta ustma-ust dars"),
+    h("ul", { class: "plain" }, found.map((c) => h("li", {}, h("b", { text: clashWhen(c) }), h("span", { text: clashNames(c).join("  va  ") })))),
+    h("p", { class: "sub", text: "Bir vaqtda ikki guruhga kira olmaysiz. Jadvalni o'quv bo'limi bilan aniqlang; o'tilmaydigan darsni jadvalda «Dars bo'lmadi» deb belgilang." }));
 }
 
 async function classContext() {   // the timetable as the other pages see it, for finding the next lesson of a class
@@ -1116,12 +1134,13 @@ async function plansView() {
   };
 
   const colorOf = subjectColors(data);
+  const clashAt = clashMap(coming);
   const row = (e, action) => {
-    const p = planOf(e), info = entryInfo(e), n = p ? p.items.length : 0;
+    const p = planOf(e), info = entryInfo(e), n = p ? p.items.length : 0, clash = clashAt.get(Timetable.clashKey(e));
     const open = () => openPlan(e, redraw, sessions);
-    return h("tr", { class: "tap", onclick: (ev) => { if (!ev.target.closest("button")) open(); } },
+    return h("tr", { class: "tap" + (clash ? " clash" : ""), onclick: (ev) => { if (!ev.target.closest("button")) open(); } },
       h("td", { class: "nowrap strong para" }, e.para + "-para", PARA_TIMES[e.para] ? h("small", { class: "muted", text: PARA_TIMES[e.para][0] + "–" + PARA_TIMES[e.para][1] }) : null),
-      h("td", { class: "lesson" }, h("span", { class: "key " + colorOf(info.name) }, h("i"), info.name),
+      h("td", { class: "lesson" }, h("span", { class: "key " + colorOf(info.name) }, h("i"), info.name, clash ? clashBadge(clash) : null),
         h("small", {}, ordinal(e), info.group ? h("span", { class: "muted", text: info.group }) : null)),
       h("td", { class: "topic" + (p && p.topic ? "" : " muted") }, p && p.topic ? p.topic : "Mavzu yozilmagan",
         n ? h("small", { class: "muted", text: n + " ta band" }) : null),
@@ -1173,7 +1192,8 @@ async function plansView() {
     }).map((x) => ({ ...x, behind: x.held - x.taught }));
     const worst = lag.reduce((m, x) => (x.behind > m.behind ? x : m), lag[0]);
     const best = lag.reduce((m, x) => (x.taught > m.taught ? x : m), lag[0]);
-    const groups = shown.map((c) => c.name).filter(Boolean), few = groups.slice(0, 3);
+    // a joint lecture lists its groups together ("S1-KT-22, S3-KT-22"): each group is named once
+    const groups = [...new Set(shown.flatMap((c) => c.name.split(",").map((x) => x.trim())).filter(Boolean))], few = groups.slice(0, 3);
     const info = group[0].info;
     return h("tr", {},
       h("td", {}, h("b", { text: info.name }), groups.length ? h("small", { class: "muted block", text: few.join(", ") + (groups.length > 3 ? " +" + (groups.length - 3) : "") }) : null),
@@ -1186,6 +1206,7 @@ async function plansView() {
   const asRows = (list) => list.map((e) => ({ date: e.date, para: e.para, row: row(e) }));
   const leadTitle = !lead ? "Kelgusi darslar" : lead === t ? "Bugungi darslar" : lead === shiftDay(t, 1) ? "Ertangi darslar" : capital(weekday(lead)) + "dagi darslar";
   show(withAge(data, "lessons", "Shundan keyin o'tgan darslar holati noma'lum.", pageHead("Dars rejasi", !current.length ? "Keyingi " + PLAN_DAYS + " kunda dars yo'q" : capital(dayTitle(lead)) + " · " + current.length + " ta dars" + (ready === current.length ? ", hammasiga tayyor" : ready ? ", " + ready + " tasiga tayyor" : ", hali tayyor emas"))),
+    clashNotice(coming, ""),
     h("section", { "aria-labelledby": "next-h", class: "stack" }, h("h2", { id: "next-h", class: "section-title", text: leadTitle }),
       current.length ? table(asRows(current)) : h("p", { class: "card empty", text: "Keyingi " + PLAN_DAYS + " kunda dars yo'q." })),
     later.length ? h("details", { class: "fold-line later-days" }, h("summary", { text: "Keyingi kunlar: " + later.length + " ta dars" }), table(asRows(later))) : null,
@@ -1236,10 +1257,12 @@ async function scheduleView() {
   const held = entries.filter((e) => paraOver(e, t, now)).length, missingNow = entries.filter(isMissing).length;
   const semester = await api("GET", "/api/semester"), weekNo = Pace.semester(semester.start, semester.weeks, monday).week;
   const unknownNow = entries.filter((e) => e.kind === "site" && Timetable.siteStatus(e.lesson, ctx, t, now) === "unknown").length;
+  const clashAt = clashMap(entries), clashCount = Timetable.clashes(entries).length;
   const summary = h("p", { class: "week-sum" },
     h("span", {}, h("b", { text: String(count) }), " ta dars"), h("span", {}, h("b", { text: String(count * HOURS_PER_PARA) }), " soat"),
     h("span", {}, h("b", { text: String(held) }), " ta o'tildi"),
     missingNow ? h("span", { class: "neg" }, h("b", { text: String(missingNow) }), " ta davomatsiz") : null,
+    clashCount ? h("span", { class: "neg" }, h("b", { text: String(clashCount) }), " ta ustma-ust") : null,
     unknownNow ? h("span", { class: "muted", title: "Sinxronlangandan keyin o'tgan darslar: davomati saytda olinganmi, noma'lum" }, h("b", { text: String(unknownNow) }), " ta noma'lum") : null);
   const dayTotal = (d) => { const n = entries.filter((e) => e.date === d).length; return h("td", { class: d === t ? "today" : null, text: n ? n + " dars · " + n * HOURS_PER_PARA + " soat" : "–" }); };
   const table = h("div", { class: "card flush" }, h("table", { class: "timetable" },
@@ -1249,8 +1272,9 @@ async function scheduleView() {
     h("tfoot", {}, h("tr", {}, h("th", { scope: "row", class: "para-col", text: "Jami" }), shownDays.map(dayTotal))),
     h("tbody", {}, rows.map((p) => h("tr", { class: entries.some((e) => e.para === p) ? null : "quiet" },
       h("th", { scope: "row", class: "para-col" }, h("span", { text: p + "-para" }), PARA_TIMES[p] ? h("small", { text: PARA_TIMES[p].join("–") }) : null),
-      shownDays.map((d) => h("td", { class: (d === t ? "today" : "") + (d === t && nowPara(p) ? " now" : "") },
+      shownDays.map((d) => h("td", { class: (d === t ? "today" : "") + (d === t && nowPara(p) ? " now" : "") + (clashAt.has(d + "|" + p) ? " clash" : "") },
         d === t && nowPara(p) ? nowLine(p, now) : null,
+        clashAt.has(d + "|" + p) ? clashBadge(clashAt.get(d + "|" + p)) : null,
         entries.filter((e) => e.date === d && e.para === p).map((e) => mark(e.kind === "site" ? withCancel(siteCard(e.lesson, ctx, colorOf(e.lesson.subject), e), e) : e.session ? courseCard(e, colorOf(COURSE.subject)) : withCancel(courseCard(e, colorOf(COURSE.subject)), e), e)))))))));
 
   const noSite = !entries.some((e) => e.kind === "site");
@@ -1286,6 +1310,7 @@ async function scheduleView() {
       h("button", { type: "button", text: "Bu hafta", disabled: jw.offset === 0, onclick: move(0, "Keyingi hafta") }),
       h("button", { type: "button", "aria-label": "Keyingi hafta", onclick: move(1, "Keyingi hafta") }, icon("forward")))),
     jw.offset === 0 ? next : null,
+    clashNotice(entries, clashCount ? "Bu haftada " + clashCount + " ta ustma-ust dars" : ""),
     open ? missing : null,
     data && !unsavedList ? h("p", { class: "sub" }, "Davomat olingan yoki olinmaganini ko'rish uchun ", h("a", { href: "#/kabinet", text: "Kabinetda qayta sinxronlang" }), ".") : null,
     table,
@@ -1920,14 +1945,18 @@ async function lessonReminder() {
   } catch (err) { return; }
   let done = "";
   try { done = localStorage.getItem("reminded") || ""; } catch (err) { /* reminders may repeat after a reload */ }
-  for (const e of entriesFor([t], reminderCtx.ctx)) {
+  const day = entriesFor([t], reminderCtx.ctx), clashAt = clashMap(day);
+  for (const e of day) {
     const times = PARA_TIMES[e.para], key = t + "|" + e.para;
     if (!times || done.split(",").includes(key)) continue;
     const left = mins(times[0]) - mins(now);
     if (left < 0 || left > REMIND_MIN) continue;
-    const site = e.kind === "site";
-    const pop = new Notification((site ? e.lesson.subject : COURSE.subject) + ", " + left + " daqiqadan keyin", {
-      body: [e.para + "-para, " + times[0], site ? e.lesson.group : COURSE.group, site ? fmtRoom(e.lesson.room) : COURSE.room].filter(Boolean).join(" · "), tag: "lesson-" + key });
+    const site = e.kind === "site", clash = clashAt.get(Timetable.clashKey(e));
+    // a clash is one reminder that names every lesson on the para, not one of them at random
+    const pop = clash
+      ? new Notification("Ustma-ust: " + e.para + "-para " + left + " daqiqadan keyin", { body: clashNames(clash).join("\n"), tag: "lesson-" + key, requireInteraction: true })
+      : new Notification((site ? e.lesson.subject : COURSE.subject) + ", " + left + " daqiqadan keyin", {
+        body: [e.para + "-para, " + times[0], site ? e.lesson.group : COURSE.group, site ? fmtRoom(e.lesson.room) : COURSE.room].filter(Boolean).join(" · "), tag: "lesson-" + key });
     pop.onclick = () => { window.focus(); location.hash = "#/"; pop.close(); };
     done = [...done.split(",").filter((k) => k.startsWith(t)), key].join(",");
     try { localStorage.setItem("reminded", done); } catch (err) { /* see above */ }
@@ -1983,10 +2012,13 @@ async function homeView() {
   const entries = entriesFor([t], ctx).sort((a, b) => a.para - b.para);
   const tomorrow = shiftDay(t, 1);
 
+  const clashAt = clashMap(entries);
+  // clashes from now on, two weeks ahead: each one needs the timetable fixed before the day comes
+  const clashesAhead = Timetable.clashes(entriesFor([...Array(14).keys()].map((i) => shiftDay(t, i)), ctx).filter((e) => !paraOver(e, t, now)));
   const lessonRow = (e) => {
-    const times = PARA_TIMES[e.para], isNow = times && times[0] <= now && now <= times[1];
-    return h("li", { class: "day-row" + (isNow ? " now" : "") + (paraOver(e, t, now) ? " over" : "") },
-      h("div", { class: "day-time" }, h("b", { text: e.para + "-para" }), times ? h("small", { text: times[0] }) : null),
+    const times = PARA_TIMES[e.para], isNow = times && times[0] <= now && now <= times[1], clash = clashAt.get(Timetable.clashKey(e));
+    return h("li", { class: "day-row" + (isNow ? " now" : "") + (paraOver(e, t, now) ? " over" : "") + (clash ? " clash" : "") },
+      h("div", { class: "day-time" }, h("b", { text: e.para + "-para" }), times ? h("small", { text: times[0] }) : null, clash ? clashBadge(clash) : null),
       e.kind === "site" ? siteCard(e.lesson, ctx, colorOf(e.lesson.subject), e) : courseCard(e, colorOf(COURSE.subject)));
   };
   const upcoming = nextEntry(ctx, t, now);
@@ -2013,6 +2045,7 @@ async function homeView() {
   const tasks = [   // [link, icon, text]; the alert ones lead
     // a sync that was never set up is a choice, not an emergency: it waits under "Keyinroq"
     syncText && status.state !== "none" ? ["#/kabinet", "alert", syncText] : null,
+    ...clashesAhead.map((c) => ["#/jadval", "alert", "Ustma-ust: " + (relDay(c.date) ? capital(relDay(c.date)) : capital(longDay(c.date))) + ", " + c.para + "-para, " + c.entries.length + " ta dars bir vaqtda"]),
     todo ? ["#/jadval", "alert", COURSE.group + ": " + todo + " ta darsda davomat olinmagan"] : null,
     gaps ? ["#/jadval", "alert", "Saytda " + gaps + " ta darsda davomat olinmagan"] : null,
     todayUnplanned.length ? ["#/reja", "alert", "Bugun " + paras(todayUnplanned) + ": reja yo'q"] : null,

@@ -64,7 +64,7 @@ create table if not exists settings (key text primary key, value text not null);
 create table if not exists lesson_plans (
     date text not null, para integer not null, subject text not null, grp text not null default '',
     topic text not null default '', items text not null default '[]', ready integer not null default 0,
-    outcome text not null default '', updated_at real not null, primary key (date, para)
+    outcome text not null default '', updated_at real not null, primary key (date, para, subject, grp)
 );
 create table if not exists course_topics (subject text primary key, topics text not null);
 create table if not exists oxu_snapshot (
@@ -154,7 +154,12 @@ func needsMigration(path string) (bool, error) {
 			}
 		}
 	}
-	return false, nil
+	// lesson plans keyed by date and para alone are rebuilt with the subject and group in the key
+	var planKey int
+	if err := db.QueryRow("select count(*) from pragma_table_info('lesson_plans') where pk > 0").Scan(&planKey); err != nil {
+		return false, err
+	}
+	return planKey == 2, nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }
@@ -235,6 +240,9 @@ func columns(q querier, table string) (map[string]bool, error) {
 
 func (s *Store) migrate() error {
 	if _, err := s.db.Exec(schema); err != nil {
+		return err
+	}
+	if err := s.migratePlanKey(); err != nil {
 		return err
 	}
 	scols, err := columns(s.db, "sessions")

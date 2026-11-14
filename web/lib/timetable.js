@@ -93,6 +93,25 @@
     return ctx.fetchedAt >= lessonEnd(l) ? "taken" : "unknown";
   }
 
-  const Timetable = { siteStatus, lessonEnd, cancelKey, lessonContext, entriesFor, paraOver, courseGaps, nextEntry, entryInfo, sameClass, nextOfClass };
+  // Lessons that fall on the same para of the same day: one teacher cannot be in two rooms at once.
+  // Groups listed separately for one joint lesson (same subject, type and room) are not a clash.
+  // Returns [{ date, para, entries }] in time order, one per clashing para.
+  function clashes(entries) {
+    const byPara = new Map();
+    for (const e of entries) {
+      const k = e.date + "|" + e.para;
+      if (!byPara.has(k)) byPara.set(k, []);
+      byPara.get(k).push(e);
+    }
+    const out = [];
+    for (const list of byPara.values()) {
+      const lessons = new Set(list.map((e) => { const i = entryInfo(e); return i.subject + "|" + i.type + "|" + i.room; }));
+      if (lessons.size > 1) out.push({ date: list[0].date, para: list[0].para, entries: list });
+    }
+    return out.sort((a, b) => a.date.localeCompare(b.date) || a.para - b.para);
+  }
+  const clashKey = (e) => e.date + "|" + e.para;
+
+  const Timetable = { clashes, clashKey, siteStatus, lessonEnd, cancelKey, lessonContext, entriesFor, paraOver, courseGaps, nextEntry, entryInfo, sameClass, nextOfClass };
   if (typeof module !== "undefined" && module.exports) module.exports = Timetable; else root.Timetable = Timetable;
 })(typeof self !== "undefined" ? self : this);

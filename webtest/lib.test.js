@@ -171,3 +171,14 @@ test("load: hours whose attendance is not known yet are held, but not done", () 
   assert.equal(P.lines.find((l) => l.group === "B1").done + 2 + 2, 6);
   assert.equal(Load.total(P.lines).unknown, 2);
 });
+
+test("two lessons on one para are a clash; one joint lesson for several groups is not", () => {
+  const algo = { date: "2026-11-16", para: "4", subject: "Algoritmlash", type: "Amaliy", group: "A-1", room: "K4 / 306" };
+  const cloud = { date: "2026-11-16", para: "4", subject: "Bulutli texnologiyalar", type: "Amaliy", group: "S5-KT-22", room: "K4 / 309" };
+  const joint = [{ date: "2026-11-17", para: "6", subject: "Bulutli texnologiyalar", type: "Ma'ruza", group: "S5-KT-22", room: "K1 / 101" },
+    { date: "2026-11-17", para: "6", subject: "Bulutli texnologiyalar", type: "Ma'ruza", group: "S8-KT-22", room: "K1 / 101" }];
+  const ctx = T.lessonContext([], { lessons: [algo, cloud, ...joint] }, new Set(), {});
+  const found = T.clashes(T.entriesFor(["2026-11-16", "2026-11-17"], ctx).filter((e) => e.kind === "site"));
+  assert.deepEqual(found.map((c) => c.date + "|" + c.para + "|" + c.entries.length), ["2026-11-16|4|2"]);
+  assert.equal(T.clashKey(found[0].entries[0]), "2026-11-16|4");
+});

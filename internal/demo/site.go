@@ -40,6 +40,8 @@ func Snapshot(start, today time.Time) *oxu.Data {
 		{"Bulutli texnologiyalar", "Ma`ruza", "S1-KT-22, S3-KT-22", "4-o'quv bino, 404-ma`ruzalar xonasi", time.Thursday, 6, day(sesFrom), day(sesTo)},
 		{"Bulutli texnologiyalar", "Amaliy", "S1-KT-22", "4-o'quv bino, 308-kompyuter xonasi", time.Saturday, 4, day(sesFrom), day(sesTo)},
 		{"Bulutli texnologiyalar", "Amaliy", "S3-KT-22", "4-o'quv bino, 308-kompyuter xonasi", time.Wednesday, 5, day(sesFrom), day(sesTo)},
+		// on the course's own para: a timetable clash, as the real one on Mondays
+		{"Bulutli texnologiyalar", "Amaliy", "S1-KT-22", "4-o'quv bino, 308-kompyuter xonasi", time.Monday, 4, day(sesFrom), day(sesTo)},
 	}
 	// the site publishes the schedule only two weeks ahead
 	last := today.AddDate(0, 0, 14)

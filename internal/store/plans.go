@@ -15,8 +15,8 @@ type PlanItem struct {
 }
 
 // LessonPlan is the teacher's own preparation for one lesson, made before the lesson exists anywhere
-// else. A teacher gives one lesson per para, so the date and timetable para (1-9) name it; the
-// subject and group are kept to show it and to find the next lesson of the same class.
+// else. The date, timetable para (1-9), subject and group name it: two lessons can fall on the same
+// para (a timetable clash), and each keeps its own plan.
 // Outcome is "" until the lesson is over: "done", "partial" or "moved" (left for the next lesson).
 type LessonPlan struct {
 	Date      string     `json:"date"`
@@ -122,7 +122,7 @@ func (s *Store) SetLessonPlan(date, para, subject, group, topic, items, ready, o
 	}
 	isReady := Truthy(ready)
 	if t == "" && len(planItems) == 0 && !isReady && out == "" {
-		_, err := s.db.Exec("delete from lesson_plans where date=? and para=?", d, p)
+		_, err := s.db.Exec("delete from lesson_plans where date=? and para=? and subject=? and grp=?", d, p, subj, grp)
 		return err
 	}
 	js, err := json.Marshal(planItems)
@@ -130,7 +130,7 @@ func (s *Store) SetLessonPlan(date, para, subject, group, topic, items, ready, o
 		return err
 	}
 	_, err = s.db.Exec(`insert into lesson_plans (date, para, subject, grp, topic, items, ready, outcome, updated_at) values (?,?,?,?,?,?,?,?,?)
-		on conflict (date, para) do update set subject=excluded.subject, grp=excluded.grp, topic=excluded.topic, items=excluded.items,
+		on conflict (date, para, subject, grp) do update set topic=excluded.topic, items=excluded.items,
 		ready=excluded.ready, outcome=excluded.outcome, updated_at=excluded.updated_at`,
 		d, p, subj, grp, t, string(js), isReady, out, now())
 	return err
@@ -189,4 +189,32 @@ func (s *Store) SetCourseTopics(subject any, topics []any) error {
 	}
 	_, err = s.db.Exec("insert into course_topics (subject, topics) values (?,?) on conflict (subject) do update set topics=excluded.topics", subj, string(js))
 	return err
+}
+
+// migratePlanKey rebuilds lesson_plans made when a plan was keyed by date and para alone, so two
+// lessons on the same para get a plan each. The rows are kept as they are.
+func (s *Store) migratePlanKey() error {
+	var n int
+	if err := s.db.QueryRow("select count(*) from pragma_table_info('lesson_plans') where pk > 0").Scan(&n); err != nil {
+		return err
+	}
+	if n != 2 {
+		return nil
+	}
+	return s.tx(func(tx *sql.Tx) error {
+		for _, q := range []string{
+			"alter table lesson_plans rename to lesson_plans_old",
+			`create table lesson_plans (
+    date text not null, para integer not null, subject text not null, grp text not null default '',
+    topic text not null default '', items text not null default '[]', ready integer not null default 0,
+    outcome text not null default '', updated_at real not null, primary key (date, para, subject, grp))`,
+			"insert into lesson_plans select date, para, subject, grp, topic, items, ready, outcome, updated_at from lesson_plans_old",
+			"drop table lesson_plans_old",
+		} {
+			if _, err := tx.Exec(q); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
